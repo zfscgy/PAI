@@ -17,6 +17,6 @@ def test_mm_2pc():
     print("Matrix AB")
     print(client1.batch_data @ client2.other_paras[1])
     print("Matrix AB calculated by secret sharing")
-    print(client1.shared_out[2] + client2.shared_out[1])
+    print(client1.shared_out_AB[2] + client2.shared_out_BA[1])
 
 test_mm_2pc()
