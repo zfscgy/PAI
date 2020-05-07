@@ -1,75 +1,11 @@
 import numpy as np
-from enum import Enum
 import threading
-import time
+from Communication.Message import MessageType, ComputationMessage
 from Communication.RPCComm import BaseChannel
 
 def log(msg):
     print(msg + "\n")
 
-
-class MessageType(Enum):
-    NULL = 0
-
-    # 以下指令主要用于Secret-sharing矩阵乘法，主要场景为一个客户端提供数据，另一个提供参数，求其变换后的数据
-    # 比如：一个客户端的数据shape = (batch_size, dim)，另一个客户端拥有对应的参数 (dim, out_dim)
-    # 该方法可以计算出这两个矩阵的乘积，而客户端的自己的数据不需要发送出去。
-
-    DATA_DIM = 1
-    """
-    Dimension message, the `data` should be:
-    dim:int
-    """
-
-    SET_TRIPLET = 11
-    """
-    Send a beaver triple request to triple provider
-    The data should be:
-    `Tuple(target_client:int, shape_sender:Tuple(int, int), shape_target:Tuple(int, int))`
-    """
-
-    TRIPLE_ARRAY = 12
-    """
-    Used for triple provider, for send the triple to the two parties
-    """
-
-    MUL_DATA_SHARE = 20
-    """
-    Used by `DataClient`, to send shares of its data to the other party
-    """
-
-    MUL_OwnVal_SHARE = 21
-    """
-    Used by `DataClient`, send its A - U to the other party 
-    (A is its share of its own matrix, and U is its share of its triple)
-    """
-
-    MUL_OtherVal_SHARE = 22
-    """
-    Used by `DataClient`, send its B - V to the other party 
-    (B is its share of the other party's matrix, and V is its share of the other party's triple)
-    """
-
-    RECEIVED_ERR = 98
-    RECEIVED_OK = 99
-
-
-class ComputationMessage:
-    """
-    Message class
-    """
-    def __init__(self, header: MessageType, data):
-        """
-        :param header:  Header of the message, specify the type of message
-        :param data: Message data
-
-        Initialize a Message
-        """
-        self.header = header
-        self.data = data
-
-    def __str__(self):
-        return "header:" + self.header.__str__() + "\ndata:" + self.data.__str__() + "\n"
 
 
 class BaseClient:
@@ -91,7 +27,7 @@ class BaseClient:
 
         :return: `True` or `False`
         """
-        self.channel.send(receiver, msg)
+        return self.channel.send(receiver, msg)
 
     def receive_msg(self, sender: int):
         return self.channel.receive(sender)
@@ -103,12 +39,15 @@ class TripletsProvider(BaseClient):
     """
     def __init__(self, client_id: int, channel: BaseChannel):
         super(TripletsProvider, self).__init__(client_id, channel)
-        self.channel.triplets_id = self.client_id
+        self.triplets_id = self.client_id
         self.triplet_proposals = dict()
         self.listening_thread = [None for _ in range(channel.n_clients)]
         self.listening = False
 
-    def receive_msg(self, sender: int, msg: ComputationMessage):
+    def receive_msg(self, sender: int):
+        msg = super(TripletsProvider, self).receive_msg(sender)
+        if msg is None:
+            return
         if msg.header == MessageType.SET_TRIPLET:
             target = msg.data[0]
             shape_sender = msg.data[1]
@@ -123,6 +62,7 @@ class TripletsProvider(BaseClient):
                     log("Triplet provider: Triplet shapes not match with target client")
             else:
                 self.triplet_proposals[(sender, target)] = (shape_sender, shape_target)
+
 
     def generate_and_send_triplets(self, clients, shapes):
         # 判断哪一个是乘数，哪一个是被乘数
@@ -139,13 +79,17 @@ class TripletsProvider(BaseClient):
         self.send_msg(clients[0], ComputationMessage(MessageType.TRIPLE_ARRAY, (clients[1], u0, v0, z0)))
         self.send_msg(clients[1], ComputationMessage(MessageType.TRIPLE_ARRAY, (clients[0], v1, u1, z1)))
 
+    def listen_to_client(self, sender_id):
+        while self.listening:
+            self.receive_msg(sender_id)
+
     def start_listening(self):
         """
         Start the listening thread
         """
         self.listening = True
         for i in range(self.channel.n_clients):
-            self.listening_thread[i] = threading.Thread(target=self.receive_msg, args=(i,))
+            self.listening_thread[i] = threading.Thread(target=self.listen_to_client, args=(i,))
             self.listening_thread[i].start()
 
     def stop_listening(self):
@@ -158,7 +102,8 @@ class TripletsProvider(BaseClient):
 
 
 class DataClient(BaseClient):
-    def __init__(self, client_id: int, channel: BaseChannel, batch_size: int, data_dim: int, output_dim: int):
+    def __init__(self, client_id: int, channel: BaseChannel, batch_size: int, data_dim: int, output_dim: int,
+                 triplets_id: int=None):
         # random generate some to data
         super(DataClient, self).__init__(client_id, channel)
         self.output_dim = output_dim
@@ -166,6 +111,8 @@ class DataClient(BaseClient):
         self.data_dim = data_dim
         self.para = np.random.uniform(-1, 1, [data_dim, output_dim])
         self.batch_data = None
+        self.triplets_id = triplets_id
+
 
         # 变量储存器，用于Secret Sharing矩阵乘法
         self.current_triplets = [None for _ in range(channel.n_clients)]
@@ -187,7 +134,6 @@ class DataClient(BaseClient):
         Receive message from sender.
         """
         msg = super(DataClient, self).receive_msg(sender)
-
         if msg.header == MessageType.DATA_DIM:
             self.other_paras[sender] = np.random.uniform(-1, 1, [msg.data, self.output_dim])
         elif msg.header == MessageType.MUL_DATA_SHARE:
@@ -212,13 +158,13 @@ class DataClient(BaseClient):
 
         # 提供数据作为矩阵乘法中的乘数
         def set_triplet_AB():
-            self.send_msg(self.channel.triplets_id,
+            self.send_msg(self.triplets_id,
                           ComputationMessage(MessageType.SET_TRIPLET, (other_id, self.batch_data.shape,
                                                                        self.para.shape)))
 
         # 提供参数作为矩阵乘法中的的被乘数
         def set_triplet_BA():
-            self.send_msg(self.channel.triplets_id,
+            self.send_msg(self.triplets_id,
                           ComputationMessage(MessageType.SET_TRIPLET, (other_id, self.other_paras[other_id].shape,
                                                                        (self.batch_size, self.other_paras[other_id].shape[0]))))
 
@@ -253,7 +199,7 @@ class DataClient(BaseClient):
         def calc_AB():
             log("Client id:%d, start calc_AB" % self.client_id)
             set_triplet_AB()
-            self.receive_msg(self.channel.triplets_id)
+            self.receive_msg(self.triplets_id)
             log("Client id:%d, triple data get" % self.client_id)
             share_data()
             self.receive_msg(other_id)
@@ -271,7 +217,7 @@ class DataClient(BaseClient):
         def calc_BA():
             log("Client id:%d, start calc_BA" % self.client_id)
             set_triplet_BA()
-            self.receive_msg(self.channel.triplets_id)
+            self.receive_msg(self.triplets_id)
             log("Client id:%d, triple data get" % self.client_id)
             share_para()
             self.receive_msg(other_id)

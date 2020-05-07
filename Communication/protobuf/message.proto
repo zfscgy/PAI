@@ -12,8 +12,9 @@ message ComputationData {
     RECEIVED_ERR = 98;
     RECEIVED_OK = 99;
   }
-  Type type = 1;
-  bytes python_bytes = 2;
+  int32 client_id = 1;
+  Type type = 2;
+  bytes python_bytes = 3;
 }
 
 service MPCService
