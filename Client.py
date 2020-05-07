@@ -2,13 +2,14 @@ import numpy as np
 from enum import Enum
 import threading
 import time
+from Communication.RPCComm import BaseChannel
 
 def log(msg):
     print(msg + "\n")
 
 
 class MessageType(Enum):
-    NULL = 99
+    NULL = 0
 
     # 以下指令主要用于Secret-sharing矩阵乘法，主要场景为一个客户端提供数据，另一个提供参数，求其变换后的数据
     # 比如：一个客户端的数据shape = (batch_size, dim)，另一个客户端拥有对应的参数 (dim, out_dim)
@@ -38,20 +39,22 @@ class MessageType(Enum):
     """
 
     MUL_OwnVal_SHARE = 21
-
     """
     Used by `DataClient`, send its A - U to the other party 
     (A is its share of its own matrix, and U is its share of its triple)
     """
+
     MUL_OtherVal_SHARE = 22
     """
     Used by `DataClient`, send its B - V to the other party 
     (B is its share of the other party's matrix, and V is its share of the other party's triple)
     """
 
+    RECEIVED_ERR = 98
+    RECEIVED_OK = 99
 
 
-class Message:
+class ComputationMessage:
     """
     Message class
     """
@@ -65,55 +68,15 @@ class Message:
         self.header = header
         self.data = data
 
-
-class Channel:
-    """
-    Channel for communication
-    """
-    def __init__(self, n_clients: int):
-        """
-        :param n_clients: Number of clients that will Join this channel
-        """
-        self.n_clients = n_clients
-        self.port = [None for _ in range(n_clients * n_clients)]
-        self.triplets_id = None
-        self.time_out = 1000
-
-    def send(self, sender: int, receiver: int, msg: Message):
-        """
-        :return: `True` if message is send successfully. If the port is occupied, wait for time_outs.
-        """
-        port_num = sender * self.n_clients + receiver
-        time_start = time.time()
-        while self.port[port_num] is not None:
-            if time.time() - time_start > self.time_out / 1000:
-                break
-        if self.port[port_num] is not None:
-            return False
-        else:
-            self.port[port_num] = msg
-            return True
-
-    def receive(self, receiver: int, sender: int):
-        """
-        :return: The message from sender. If there's no message during the waiting time, return `None`
-        """
-        port_num = sender * self.n_clients + receiver
-        msg = None
-        time_start = time.time()
-        while msg is None:
-            msg = self.port[port_num]
-            if time.time() - time_start > self.time_out / 1000:
-                break
-        self.port[port_num] = None
-        return msg
+    def __str__(self):
+        return "header:" + self.header.__str__() + "\ndata:" + self.data.__str__() + "\n"
 
 
 class BaseClient:
     """
     Base class of client
     """
-    def __init__(self, client_id, channel):
+    def __init__(self, client_id, channel: BaseChannel):
         """
         :param client_id: An integer to identify the client
         :type client_id: int
@@ -122,49 +85,44 @@ class BaseClient:
         self.client_id = client_id
         self.channel = channel
 
-    def send_msg(self, receiver: int, msg: Message):
+    def send_msg(self, receiver: int, msg: ComputationMessage):
         """
         Send a message to the receiver
 
         :return: `True` or `False`
         """
-        self.channel.send(self.client_id, receiver, msg)
+        self.channel.send(receiver, msg)
 
-    def receive_msg(self, sender):
-        pass
+    def receive_msg(self, sender: int):
+        return self.channel.receive(sender)
 
 
 class TripletsProvider(BaseClient):
     """
     A client for generate beaver triples. It can listen to other clients
     """
-    def __init__(self, client_id: int, channel: Channel):
+    def __init__(self, client_id: int, channel: BaseChannel):
         super(TripletsProvider, self).__init__(client_id, channel)
         self.channel.triplets_id = self.client_id
         self.triplet_proposals = dict()
         self.listening_thread = [None for _ in range(channel.n_clients)]
         self.listening = False
 
-    def receive_msg(self, sender):
-        log("Triplet Provider: Started Listening on client %d" % sender)
-        while True and self.listening:
-            msg = self.channel.receive(self.client_id, sender)
-            if msg is None:
-                continue
-            if msg.header == MessageType.SET_TRIPLET:
-                target = msg.data[0]
-                shape_sender = msg.data[1]
-                shape_target = msg.data[2]
-                existing_shapes = self.triplet_proposals.get((target, sender))
-                if existing_shapes is not None:
-                    if existing_shapes[0] == shape_target and existing_shapes[1] == shape_sender:
-                        self.generate_and_send_triplets((sender, target), (shape_sender, shape_target))
-                        log("Triplet provider: send triples")
-                        del self.triplet_proposals[(target, sender)]
-                    else:
-                        log("Triplet provider: Triplet shapes not match with target client")
+    def receive_msg(self, sender: int, msg: ComputationMessage):
+        if msg.header == MessageType.SET_TRIPLET:
+            target = msg.data[0]
+            shape_sender = msg.data[1]
+            shape_target = msg.data[2]
+            existing_shapes = self.triplet_proposals.get((target, sender))
+            if existing_shapes is not None:
+                if existing_shapes[0] == shape_target and existing_shapes[1] == shape_sender:
+                    self.generate_and_send_triplets((sender, target), (shape_sender, shape_target))
+                    log("Triplet provider: send triples")
+                    del self.triplet_proposals[(target, sender)]
                 else:
-                    self.triplet_proposals[(sender, target)] = (shape_sender, shape_target)
+                    log("Triplet provider: Triplet shapes not match with target client")
+            else:
+                self.triplet_proposals[(sender, target)] = (shape_sender, shape_target)
 
     def generate_and_send_triplets(self, clients, shapes):
         # 判断哪一个是乘数，哪一个是被乘数
@@ -178,8 +136,8 @@ class TripletsProvider(BaseClient):
         z = np.matmul(u0 + u1, v0 + v1)
         z0 = z * np.random.uniform(0, 1, z.shape)
         z1 = z - z0
-        self.send_msg(clients[0], Message(MessageType.TRIPLE_ARRAY, (clients[1], u0, v0, z0)))
-        self.send_msg(clients[1], Message(MessageType.TRIPLE_ARRAY, (clients[0], v1, u1, z1)))
+        self.send_msg(clients[0], ComputationMessage(MessageType.TRIPLE_ARRAY, (clients[1], u0, v0, z0)))
+        self.send_msg(clients[1], ComputationMessage(MessageType.TRIPLE_ARRAY, (clients[0], v1, u1, z1)))
 
     def start_listening(self):
         """
@@ -198,8 +156,9 @@ class TripletsProvider(BaseClient):
         for i in range(self.channel.n_clients):
             self.listening_thread[i].join()
 
+
 class DataClient(BaseClient):
-    def __init__(self, client_id: int, channel: Channel, batch_size: int, data_dim: int, output_dim: int):
+    def __init__(self, client_id: int, channel: BaseChannel, batch_size: int, data_dim: int, output_dim: int):
         # random generate some to data
         super(DataClient, self).__init__(client_id, channel)
         self.output_dim = output_dim
@@ -226,14 +185,9 @@ class DataClient(BaseClient):
     def receive_msg(self, sender):
         """
         Receive message from sender.
-
         """
-        msg = None
-        while msg is None and self.working:
-            msg = self.channel.receive(self.client_id, sender)
-        if msg is None:
-            log("Client id %d :Work Terminated")
-            return
+        msg = super(DataClient, self).receive_msg(sender)
+
         if msg.header == MessageType.DATA_DIM:
             self.other_paras[sender] = np.random.uniform(-1, 1, [msg.data, self.output_dim])
         elif msg.header == MessageType.MUL_DATA_SHARE:
@@ -254,36 +208,36 @@ class DataClient(BaseClient):
             self.batch_data = np.random.uniform(-1, 1, [self.batch_size, self.data_dim])
 
         def send_data_dim():
-            self.send_msg(other_id, Message(MessageType.DATA_DIM, self.data_dim))
+            self.send_msg(other_id, ComputationMessage(MessageType.DATA_DIM, self.data_dim))
 
         # 提供数据作为矩阵乘法中的乘数
         def set_triplet_AB():
             self.send_msg(self.channel.triplets_id,
-                          Message(MessageType.SET_TRIPLET, (other_id, self.batch_data.shape,
-                                                            self.para.shape)))
+                          ComputationMessage(MessageType.SET_TRIPLET, (other_id, self.batch_data.shape,
+                                                                       self.para.shape)))
 
         # 提供参数作为矩阵乘法中的的被乘数
         def set_triplet_BA():
             self.send_msg(self.channel.triplets_id,
-                          Message(MessageType.SET_TRIPLET, (other_id, self.other_paras[other_id].shape,
-                                                            (self.batch_size, self.other_paras[other_id].shape[0]))))
+                          ComputationMessage(MessageType.SET_TRIPLET, (other_id, self.other_paras[other_id].shape,
+                                                                       (self.batch_size, self.other_paras[other_id].shape[0]))))
 
         def share_data():
             self.shared_own_mat[other_id] = self.batch_data * np.random.uniform(0, 1, self.batch_data.shape)
-            self.send_msg(other_id, Message(MessageType.MUL_DATA_SHARE, self.batch_data - self.shared_own_mat[other_id]))
+            self.send_msg(other_id, ComputationMessage(MessageType.MUL_DATA_SHARE, self.batch_data - self.shared_own_mat[other_id]))
 
         def share_para():
             self.shared_own_mat[other_id] = self.other_paras[other_id] * \
                                             np.random.uniform(0, 1, self.other_paras[other_id].shape)
-            self.send_msg(other_id, Message(MessageType.MUL_DATA_SHARE, self.other_paras[other_id] - self.shared_own_mat[other_id]))
+            self.send_msg(other_id, ComputationMessage(MessageType.MUL_DATA_SHARE, self.other_paras[other_id] - self.shared_own_mat[other_id]))
 
         def recover_own_value():
-            self.send_msg(other_id, Message(MessageType.MUL_OwnVal_SHARE,
-                                            self.shared_own_mat[other_id] - self.current_triplets[other_id][0]))
+            self.send_msg(other_id, ComputationMessage(MessageType.MUL_OwnVal_SHARE,
+                                                       self.shared_own_mat[other_id] - self.current_triplets[other_id][0]))
 
         def recover_other_value():
-            self.send_msg(other_id, Message(MessageType.MUL_OtherVal_SHARE,
-                                            self.shared_other_mat[other_id] - self.current_triplets[other_id][1]))
+            self.send_msg(other_id, ComputationMessage(MessageType.MUL_OtherVal_SHARE,
+                                                       self.shared_other_mat[other_id] - self.current_triplets[other_id][1]))
 
         def get_shared_out_AB():
             self.shared_out_AB[other_id] = - np.matmul(self.recovered_own_value[other_id],

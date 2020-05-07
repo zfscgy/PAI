@@ -1,0 +1,22 @@
+syntax = "proto3";
+// Use this to generate:  python -m grpc_tools.protoc -I . --python_out=. --grpc_python_out=. message.proto
+message ComputationData {
+  enum Type {
+    NULL = 0;
+    DATA_DIM = 1;
+    SET_TRIPLET = 11;
+    TRIPLE_ARRAY = 12;
+    MUL_DATA_SHARE = 20;
+    MUL_OwnVal_SHARE = 21;
+    MUL_OtherVal_SHARE = 22;
+    RECEIVED_ERR = 98;
+    RECEIVED_OK = 99;
+  }
+  Type type = 1;
+  bytes python_bytes = 2;
+}
+
+service MPCService
+{
+  rpc GetComputationData(ComputationData) returns(ComputationData) {}
+}
