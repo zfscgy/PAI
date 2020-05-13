@@ -18,60 +18,10 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=b'\n\rmessage.proto\"\x88\x02\n\x0f\x43omputationData\x12\x11\n\tclient_id\x18\x01 \x01(\x05\x12#\n\x04type\x18\x02 \x01(\x0e\x32\x15.ComputationData.Type\x12\x14\n\x0cpython_bytes\x18\x03 \x01(\x0c\"\xa6\x01\n\x04Type\x12\x08\n\x04NULL\x10\x00\x12\x0c\n\x08\x44\x41TA_DIM\x10\x01\x12\x0f\n\x0bSET_TRIPLET\x10\x0b\x12\x10\n\x0cTRIPLE_ARRAY\x10\x0c\x12\x12\n\x0eMUL_DATA_SHARE\x10\x14\x12\x14\n\x10MUL_OwnVal_SHARE\x10\x15\x12\x16\n\x12MUL_OtherVal_SHARE\x10\x16\x12\x10\n\x0cRECEIVED_ERR\x10\x62\x12\x0f\n\x0bRECEIVED_OK\x10\x63\x32H\n\nMPCService\x12:\n\x12GetComputationData\x12\x10.ComputationData\x1a\x10.ComputationData\"\x00\x62\x06proto3'
+  serialized_pb=b'\n\rmessage.proto\"H\n\x0f\x43omputationData\x12\x11\n\tclient_id\x18\x01 \x01(\x05\x12\x0c\n\x04type\x18\x02 \x01(\x05\x12\x14\n\x0cpython_bytes\x18\x03 \x01(\x0c\x32H\n\nMPCService\x12:\n\x12GetComputationData\x12\x10.ComputationData\x1a\x10.ComputationData\"\x00\x62\x06proto3'
 )
 
 
-
-_COMPUTATIONDATA_TYPE = _descriptor.EnumDescriptor(
-  name='Type',
-  full_name='ComputationData.Type',
-  filename=None,
-  file=DESCRIPTOR,
-  values=[
-    _descriptor.EnumValueDescriptor(
-      name='NULL', index=0, number=0,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='DATA_DIM', index=1, number=1,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='SET_TRIPLET', index=2, number=11,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='TRIPLE_ARRAY', index=3, number=12,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='MUL_DATA_SHARE', index=4, number=20,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='MUL_OwnVal_SHARE', index=5, number=21,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='MUL_OtherVal_SHARE', index=6, number=22,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='RECEIVED_ERR', index=7, number=98,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='RECEIVED_OK', index=8, number=99,
-      serialized_options=None,
-      type=None),
-  ],
-  containing_type=None,
-  serialized_options=None,
-  serialized_start=116,
-  serialized_end=282,
-)
-_sym_db.RegisterEnumDescriptor(_COMPUTATIONDATA_TYPE)
 
 
 _COMPUTATIONDATA = _descriptor.Descriptor(
@@ -90,7 +40,7 @@ _COMPUTATIONDATA = _descriptor.Descriptor(
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
       name='type', full_name='ComputationData.type', index=1,
-      number=2, type=14, cpp_type=8, label=1,
+      number=2, type=5, cpp_type=1, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -107,7 +57,6 @@ _COMPUTATIONDATA = _descriptor.Descriptor(
   ],
   nested_types=[],
   enum_types=[
-    _COMPUTATIONDATA_TYPE,
   ],
   serialized_options=None,
   is_extendable=False,
@@ -115,12 +64,10 @@ _COMPUTATIONDATA = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=18,
-  serialized_end=282,
+  serialized_start=17,
+  serialized_end=89,
 )
 
-_COMPUTATIONDATA.fields_by_name['type'].enum_type = _COMPUTATIONDATA_TYPE
-_COMPUTATIONDATA_TYPE.containing_type = _COMPUTATIONDATA
 DESCRIPTOR.message_types_by_name['ComputationData'] = _COMPUTATIONDATA
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -139,8 +86,8 @@ _MPCSERVICE = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=284,
-  serialized_end=356,
+  serialized_start=91,
+  serialized_end=163,
   methods=[
   _descriptor.MethodDescriptor(
     name='GetComputationData',

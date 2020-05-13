@@ -8,11 +8,7 @@ class MessageType(Enum):
     # 比如：一个客户端的数据shape = (batch_size, dim)，另一个客户端拥有对应的参数 (dim, out_dim)
     # 该方法可以计算出这两个矩阵的乘积，而客户端的自己的数据不需要发送出去。
 
-    DATA_DIM = 1
-    """
-    Dimension message, the `data` should be:
-    dim:int
-    """
+
 
     SET_TRIPLET = 11
     """
@@ -25,6 +21,16 @@ class MessageType(Enum):
     """
     Used for triple provider, for send the triple to the two parties
     """
+
+    LOAD_BATCH = 15
+    """
+    Client load a batch
+    """
+
+    PARA_GRAD = 16
+
+    TRAINING_STOP = 17
+    # Those is for shared matrix multiplication
 
     MUL_DATA_SHARE = 20
     """
@@ -42,7 +48,14 @@ class MessageType(Enum):
     Used by `DataClient`, send its B - V to the other party 
     (B is its share of the other party's matrix, and V is its share of the other party's triple)
     """
+    DATA_DIM = 23
+    """
+    Dimension message, the `data` should be:
+    dim:int
+    """
 
+
+    # Those is for message responses
     RECEIVED_ERR = 98
     RECEIVED_OK = 99
 

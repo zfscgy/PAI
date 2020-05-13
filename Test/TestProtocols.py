@@ -1,7 +1,6 @@
-import numpy as np
 from Communication.RPCComm import Peer
-from Client import DataClient, TripletsProvider
-from Protocols import matrix_multiply_2pc
+from Client.DataProviders import DataClient, TripletsProvider
+from Client.Protocols import matrix_multiply_2pc
 
 def test_mm_2pc():
     ip_dict = {

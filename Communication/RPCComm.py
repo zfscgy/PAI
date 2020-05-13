@@ -1,30 +1,15 @@
 import numpy as np
+import sys
 import pickle
 import grpc
 import time
+import datetime
 import concurrent.futures as futures
 from Communication.protobuf import message_pb2, message_pb2_grpc
 from Communication.Message import MessageType, ComputationMessage
+from Utils.Log import Logger
 
 
-class BaseChannel:
-    """
-    Channel for communication
-    """
-    def __init__(self, n_clients: int):
-        """
-        :param n_clients: Number of clients that will Join this channel
-        """
-        self.n_clients = n_clients
-
-    def send(self, receiver: int, msg: ComputationMessage):
-        """
-        :return: `True` if message is send successfully. If the port is occupied, wait for time_outs.
-        """
-        raise NotImplementedError()
-
-    def receive(self, sender: int):
-        raise NotImplementedError()
 
 
 def encode_ComputationData(computation_message: ComputationMessage):
@@ -73,7 +58,7 @@ class Peer(BaseChannel):
     """
     客户端类。每个客户端也包含一个服务器用于监听其他客户端。
     """
-    def __init__(self, self_id, self_port: str, self_max_workers: int, ip_dict: dict, time_out: float=1):
+    def __init__(self, self_id, self_port: str, self_max_workers: int, ip_dict: dict, time_out: float=1, logger=None):
         """
         :param self_id: 客户端的ID，必须是唯一的
         :param self_port: 客户端监听的端口号
@@ -89,6 +74,10 @@ class Peer(BaseChannel):
         self.receive_buffer = [None for _ in ip_dict]
         self.time_out = time_out
         self.server.start()
+        if logger is None:
+            logger = Logger()
+        self.logger = logger
+        self.logger.log("Client id %d started." % self.client_id)
 
     def buffer_msg(self, msg, sender_id):
         """
@@ -102,6 +91,7 @@ class Peer(BaseChannel):
             while self.receive_buffer[sender_id] is not None:
                 time.sleep(0.01)
                 if time.time() > msg_received_time + self.time_out:
+                    self.logger.log("Timeout while wating for buffer for sender %d. Time elapsed %.3f" % (sender_id, self.time_out))
                     return False
             self.receive_buffer[sender_id] = msg
             return True
@@ -119,6 +109,7 @@ class Peer(BaseChannel):
         while self.receive_buffer[sender] is None:
             time.sleep(0.01)
             if time.time() - start_receive_time > time_out:
+                self.logger.log("Timeout while receiving from client %d. Time elapsed %.3f" % (sender, time_out))
                 return None
         msg = self.receive_buffer[sender]
         self.receive_buffer[sender] = None
@@ -138,6 +129,7 @@ class Peer(BaseChannel):
         while resp == MessageType.RECEIVED_ERR:
             time.sleep(0.01)
             if time.time() - start_send_time > time_out:
+                self.logger.log("Timeout while sending to client %d. Time elapsed %.3f" % (receiver, time_out))
                 return resp
             resp = self.rpc_clients[receiver].sendComputationMessage(msg, self.client_id)
         return resp

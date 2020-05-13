@@ -1,4 +1,4 @@
-from Client import DataClient, TripletsProvider
+from Client.Client import DataClient, TripletsProvider
 
 
 def matrix_multiply_2pc(client_0: DataClient, client_1: DataClient, triplet_provider: TripletsProvider):

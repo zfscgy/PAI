@@ -1,8 +1,6 @@
-import numpy as np
 import threading
-from Communication.RPCComm import ComputationRPCClient, ComputationRPCServer, \
-    decode_ComputationData, encode_ComputationData, Peer
-from Client import BaseClient, MessageType, ComputationMessage
+from Communication.RPCComm import decode_ComputationData, encode_ComputationData, Peer
+from Client.Client import BaseClient, MessageType, ComputationMessage
 
 
 def test_encode_decode():
