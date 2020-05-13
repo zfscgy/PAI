@@ -47,6 +47,12 @@ class MessageType(Enum):
     RECEIVED_OK = 99
 
 
+class ReceiveERRType(Enum):
+    BUFFER_OCCUPIED = 1
+    UNRECOGNIZED_SENDER = 2
+    CONNECTION_FAILED = 3
+
+
 class ComputationMessage:
     """
     Message class

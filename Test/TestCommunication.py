@@ -42,6 +42,7 @@ def test_rpc():
     client1thread.join()
     print("========== Test finished ========")
 
+
 if __name__ == "__main__":
     test_encode_decode()
     test_rpc()
