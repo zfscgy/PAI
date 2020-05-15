@@ -5,7 +5,7 @@ from Client.Client import BaseClient, MessageType, ComputationMessage
 
 def test_encode_decode():
     print("========== Test encoding & decoding =========")
-    comp_msg = ComputationMessage(header=MessageType.DATA_DIM, data=(12, 34))
+    comp_msg = ComputationMessage(header=MessageType.NULL, data=(12, 34))
     encoded_msg = encode_ComputationData(comp_msg)
     decoded_msg = decode_ComputationData(encoded_msg)
     print("Raw:", comp_msg, sep="\n")

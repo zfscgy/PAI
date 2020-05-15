@@ -5,6 +5,7 @@ import grpc
 import time
 import datetime
 import concurrent.futures as futures
+from Communication.Channel import BaseChannel
 from Communication.protobuf import message_pb2, message_pb2_grpc
 from Communication.Message import MessageType, ComputationMessage
 from Utils.Log import Logger
@@ -58,7 +59,7 @@ class Peer(BaseChannel):
     """
     客户端类。每个客户端也包含一个服务器用于监听其他客户端。
     """
-    def __init__(self, self_id, self_port: str, self_max_workers: int, ip_dict: dict, time_out: float=1, logger=None):
+    def __init__(self, self_id, self_port: str, self_max_workers: int, ip_dict: dict, time_out: float=1):
         """
         :param self_id: 客户端的ID，必须是唯一的
         :param self_port: 客户端监听的端口号
@@ -74,9 +75,6 @@ class Peer(BaseChannel):
         self.receive_buffer = [None for _ in ip_dict]
         self.time_out = time_out
         self.server.start()
-        if logger is None:
-            logger = Logger()
-        self.logger = logger
         self.logger.log("Client id %d started." % self.client_id)
 
     def buffer_msg(self, msg, sender_id):

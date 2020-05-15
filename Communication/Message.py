@@ -22,14 +22,24 @@ class MessageType(Enum):
     Used for triple provider, for send the triple to the two parties
     """
 
-    LOAD_BATCH = 15
+    TRAIN_CONFIG = 14
     """
-    Client load a batch
+    Configurations for training, should be sent by the main client before start traing,
+    including: data_dimensions, batch_sizes
     """
 
-    PARA_GRAD = 16
+    CLIENT_READY = 15
+    """
+    """
 
-    TRAINING_STOP = 17
+    NEXT_TRAIN_ROUND = 17
+    """
+    Client start next training round
+    """
+
+    PARA_GRAD = 18
+
+    TRAINING_STOP = 19
     # Those is for shared matrix multiplication
 
     MUL_DATA_SHARE = 20
@@ -48,11 +58,11 @@ class MessageType(Enum):
     Used by `DataClient`, send its B - V to the other party 
     (B is its share of the other party's matrix, and V is its share of the other party's triple)
     """
-    DATA_DIM = 23
-    """
-    Dimension message, the `data` should be:
-    dim:int
-    """
+
+    MUL_OUT_SHARE = 24
+
+    PRED_LABEL = 28
+    PRED_GRAD = 29
 
 
     # Those is for message responses

@@ -1,10 +1,11 @@
 import numpy as np
 import threading
 import traceback
-from Client.Client import BaseClient
+from Client.Client import BaseClient, ClientException
 from Communication.Message import MessageType, ComputationMessage
 from Communication.Channel import BaseChannel
 from Client.Data import DataLoader
+from Client.Learning.Losses import LossFunc, MSELoss
 from Utils.Log import Logger
 
 
@@ -76,34 +77,32 @@ class TripletsProvider(BaseClient):
 
 
 class DataClient(BaseClient):
-    def __init__(self, client_id: int, channel: BaseChannel, dataloader: DataLoader, batch_size: int, data_dim: int, output_dim: int,
-                 triplets_id: int=None):
+    def __init__(self, client_id: int, channel: BaseChannel, data_loader: DataLoader,
+                 server_id: int, triplets_id: int, other_client_ids: list):
         # random generate some to data
         super(DataClient, self).__init__(client_id, channel)
-        self.dataloader =dataloader
-        self.output_dim = output_dim
-        self.batch_size = batch_size
-        self.data_dim = data_dim
-        self.para = np.random.uniform(-1, 1, [data_dim, output_dim])
+        self.data_loader = data_loader
         self.batch_data = None
+        self.server_id = server_id
         self.triplets_id = triplets_id
+        self.other_client_ids = other_client_ids
 
+        # Configs
+        self.batch_size = None
+        self.para = None
 
         # 变量储存器，用于Secret Sharing矩阵乘法
         self.current_triplets = [None for _ in range(channel.n_clients)]
         self.other_paras = [None for _ in range(channel.n_clients)]
-
         self.shared_own_mat = [None for _ in range(channel.n_clients)]
         self.shared_other_mat = [None for _ in range(channel.n_clients)]
-
         self.recovered_own_value = [None for _ in range(channel.n_clients)]
         self.recovered_other_value = [None for _ in range(channel.n_clients)]
         self.shared_out_AB = [None for _ in range(channel.n_clients)]
         self.shared_out_BA = [None for _ in range(channel.n_clients)]
+        self.own_out = None
 
-        self.calc_threads = [None for _ in range(channel.n_clients)]
-        self.working = True
-
+        self.error = False
 
     def __calculate_first_hidden_layer(self, other_id):
         """
@@ -111,14 +110,7 @@ class DataClient(BaseClient):
         :return:
         """
         def get_next_batch():
-            self.batch_data = np.random.uniform(-1, 1, [self.batch_size, self.data_dim])
-
-        def send_data_dim():
-            self.send_check_msg(other_id, ComputationMessage(MessageType.DATA_DIM, self.data_dim))
-
-        def get_data_dim():
-            msg = self.receive_check_msg(other_id, MessageType.DATA_DIM)
-            self.other_paras[other_id] = np.random.normal(0, 1, [msg.data, self.output_dim])
+            self.batch_data = self.data_loader.get_train_batch()
 
         # 提供数据作为矩阵乘法中的乘数
         def set_triplet_AB():
@@ -200,35 +192,85 @@ class DataClient(BaseClient):
             get_shared_out_BA()
         try:
             get_next_batch()
-            send_data_dim()
-            get_data_dim()
-
             if other_id < self.client_id:
                 calc_AB()
                 calc_BA()
             else:
                 calc_BA()
                 calc_AB()
+        except ClientException as e:
+            self.logger.logE("Client Exception encountered, stop calculating.")
+            self.error = True
         except Exception as e:
-            self.logger.logE("Python Exception: \n" + traceback.format_exc())
+            self.logger.logE("Python Exception encountered , stop calculating: \n" + traceback.format_exc())
+            self.error = True
         finally:
             return
 
-    def start_calc_first_layer(self, other_id):
-        self.working = True
-        thread = threading.Thread(target=self.__calculate_first_hidden_layer, args=(other_id,))
-        self.calc_threads[other_id] = thread
-        thread.start()
-        return thread
+    def __calc_out_share(self):
+        calc_threads = []
+        for client in self.other_client_ids:
+            calc_threads.append(threading.Thread(target=self.__calculate_first_hidden_layer, args=(client,)))
+            calc_threads[-1].start()
 
-    def stop_work(self):
-        self.working = False
+        # While do secret-sharing matrix multiplication with other clients, do matrix multiplication on
+        # local data and parameter.
+
+        self.own_out = np.matmul(self.batch_data, self.para)
+
+        for calc_thread in calc_threads:
+            calc_thread.join()
+
+    def start_train(self):
+
+        # Get initial training configurations
+        try:
+            msg = self.receive_check_msg(self.server_id, MessageType.TRAIN_CONFIG)
+            client_dims = msg.data["client_dims"]
+            out_dim = msg.data["out_dim"]
+            for other_id in client_dims:
+                self.other_paras[other_id] = np.random.normal(0, 1, [msg.data, out_dim])
+            self.para = self.other_paras[self.client_id]
+            self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_READY, None))
+        except ClientException:
+            self.error = True
+        except Exception as e:
+            self.logger.logE("Python Exception encountered, stop calculating: \n" + traceback.format_exc())
+            self.error = True
+
+        while not self.error:
+            try:
+                self.receive_check_msg(self.server_id, MessageType.NEXT_TRAIN_ROUND)
+                self.__calc_out_share()
+                self.send_check_msg(self.server_id, ComputationMessage(MessageType.MUL_OUT_SHARE,
+                                                                       (self.own_out, self.shared_out_AB, self.shared_out_BA)))
+            except ClientException:
+                self.error = True
+            except Exception:
+                self.logger.logE("Python Exception encountered , stop calculating: \n" + traceback.format_exc())
+                self.error = True
 
 
 class LabelClient(BaseClient):
-    def __init__(self, client_id: int, channel: BaseChannel, label_loader: DataLoader, batch_size: int, label_dim: int, server_id):
+    def __init__(self, client_id: int, channel: BaseChannel, label_loader: DataLoader,
+                 batch_size: int, label_dim: int, server_id: int, loss_func=None):
         super(LabelClient, self).__init__(client_id, channel)
         self.label_loader = label_loader
         self.batch_size = batch_size
         self.label_dim = label_dim
         self.server_id = server_id
+        if loss_func is None:
+            self.loss_func = MSELoss
+        else:
+            self.loss_func = loss_func
+
+        # cached labels
+        self.labels = None
+        self.compute_grad_thread = None
+
+    def __compute_pred_grad(self):
+        preds = self.receive_check_msg(self.server_id, MessageType.PRED_LABEL)
+        loss = self.loss_func.forward(preds, self.labels)
+        grad = self.loss_func.backward()
+        self.send_check_msg(self.server_id, ComputationMessage(MessageType.PRED_GRAD, (grad, loss)))
+

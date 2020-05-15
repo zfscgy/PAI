@@ -43,9 +43,16 @@ class BaseClient:
     def receive_msg(self, sender: int, time_out=None):
         return self.channel.receive(sender, time_out)
 
-    def receive_check_msg(self, sender: int, header: MessageType, time_out=None):
+    def receive_check_msg(self, sender: int, header, time_out=None):
+        """
+        :param sender:
+        :param header: can be MessageType or list of MessageType
+        :param time_out:
+        :return:
+        """
         msg = self.receive_msg(sender, time_out)
-        if msg.header != header:
+        if (type(header) == MessageType and msg.header != header) or \
+                (type(header) == list and msg.header not in header):
             msg = "Expect message type %s, but get message type %s" % (str(msg.header), str(header))
             self.logger.logE(msg)
             raise ClientException("Receive check fails: " + msg)
