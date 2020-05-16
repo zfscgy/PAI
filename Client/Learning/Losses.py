@@ -13,6 +13,7 @@ class LossException(Exception):
 class LossFunc:
     def forward(self, ys, pred_ys):
         raise NotImplementedError()
+
     def backward(self):
         raise NotImplementedError()
 

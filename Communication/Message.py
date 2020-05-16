@@ -63,7 +63,9 @@ class MessageType(Enum):
 
     PRED_LABEL = 28
     PRED_GRAD = 29
-
+    CLIENT_OUT_GRAD = 30
+    CLIENT_PARA_UPDATE = 31
+    CLIENT_ROUND_OVER = 32
 
     # Those is for message responses
     RECEIVED_ERR = 98

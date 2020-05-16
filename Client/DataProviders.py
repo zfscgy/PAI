@@ -13,8 +13,8 @@ class TripletsProvider(BaseClient):
     """
     A client for generate beaver triples. It can listen to other clients
     """
-    def __init__(self, client_id: int, channel: BaseChannel):
-        super(TripletsProvider, self).__init__(client_id, channel)
+    def __init__(self, client_id: int, channel: BaseChannel, logger:Logger=None):
+        super(TripletsProvider, self).__init__(client_id, channel, logger)
         self.triplets_id = self.client_id
         self.triplet_proposals = dict()
         self.listening_thread = [None for _ in range(channel.n_clients)]
@@ -78,22 +78,24 @@ class TripletsProvider(BaseClient):
 
 class DataClient(BaseClient):
     def __init__(self, client_id: int, channel: BaseChannel, data_loader: DataLoader,
-                 server_id: int, triplets_id: int, other_client_ids: list):
+                 server_id: int, triplets_id: int, other_data_clients: list):
         # random generate some to data
         super(DataClient, self).__init__(client_id, channel)
         self.data_loader = data_loader
         self.batch_data = None
         self.server_id = server_id
         self.triplets_id = triplets_id
-        self.other_client_ids = other_client_ids
+        self.other_data_clients = other_data_clients
 
         # Configs
         self.batch_size = None
         self.para = None
+        self.other_paras = [None for _ in range(channel.n_clients)]
+        self.learning_rate = None
 
         # 变量储存器，用于Secret Sharing矩阵乘法
         self.current_triplets = [None for _ in range(channel.n_clients)]
-        self.other_paras = [None for _ in range(channel.n_clients)]
+
         self.shared_own_mat = [None for _ in range(channel.n_clients)]
         self.shared_other_mat = [None for _ in range(channel.n_clients)]
         self.recovered_own_value = [None for _ in range(channel.n_clients)]
@@ -209,7 +211,7 @@ class DataClient(BaseClient):
 
     def __calc_out_share(self):
         calc_threads = []
-        for client in self.other_client_ids:
+        for client in self.other_data_clients:
             calc_threads.append(threading.Thread(target=self.__calculate_first_hidden_layer, args=(client,)))
             calc_threads[-1].start()
 
@@ -221,13 +223,85 @@ class DataClient(BaseClient):
         for calc_thread in calc_threads:
             calc_thread.join()
 
-    def start_train(self):
+    def __send_updates_to(self, client_id: int, update: np.ndarray):
+        try:
+            self.send_check_msg(client_id, ComputationMessage(MessageType.CLIENT_PARA_UPDATE, update))
+        except:
+            self.logger.logE("Error encountered while sending parameter updates to other data clients")
+            self.error = True
 
+    def __recv_updates_from(self, client_id: int, updates: np.ndarray):
+        try:
+            update_msg = self.receive_check_msg(client_id, MessageType.CLIENT_PARA_UPDATE)
+            self.other_paras[client_id] -= self.learning_rate * update_msg.data
+        except:
+            self.logger.logE("Error encountered while receiving parameter updates from other data clients")
+            self.error = True
+
+    def __parameter_update(self):
+        updates = self.receive_check_msg(self.server_id, MessageType.CLIENT_OUT_GRAD)
+        own_para_grad = self.batch_data.traspose() @ updates
+        portion = np.random.uniform(0, 1, len(self.other_data_clients) + 1)
+        portion /= np.sum(portion)
+        self.para -= self.learning_rate * own_para_grad
+        send_update_threads = []
+        for i, data_client in enumerate(self.other_data_clients):
+            send_update_threads.append(threading.Thread(
+                target=self.__send_updates_to, args=(data_client, own_para_grad * portion[i + 1])
+            ))
+            send_update_threads[-1].start()
+
+        recv_update_threads = []
+        for data_client in self.other_data_clients:
+            recv_update_threads.append(threading.Thread(
+                target=self.__recv_updates_from, args=(data_client,)
+            ))
+            recv_update_threads[-1].start()
+        for thread in send_update_threads + recv_update_threads:
+            thread.join()
+
+    def __train_one_round(self):
+        try:
+            start_msg = self.receive_check_msg(self.server_id,
+                                               [MessageType.NEXT_TRAIN_ROUND, MessageType.TRAINING_STOP])
+            if start_msg.header == MessageType.TRAINING_STOP:
+                self.logger.log("Received server's training stop message, stop training")
+                return False
+        except:
+            self.logger.logE("Error encountered while receiving server's start message")
+            return False
+
+        self.__calc_out_share()
+        if self.error:
+            self.logger.logE("Error encountered while calculating shared outputs")
+            return False
+
+        try:
+            self.send_check_msg(self.server_id,
+                                ComputationMessage(MessageType.MUL_OUT_SHARE,
+                                                   (self.own_out, self.shared_out_AB, self.shared_out_BA)))
+        except:
+            self.logger.logE("Error encountered while sending output shares to server")
+            return False
+
+        try:
+            self.__parameter_update()
+        except:
+            self.logger.logE("Error encountered while updateing parameters")
+            return False
+        if self.error:
+            self.logger.logE("Error encountered while updateing parameters")
+            return False
+
+        return True
+
+    def start_train(self):
         # Get initial training configurations
         try:
-            msg = self.receive_check_msg(self.server_id, MessageType.TRAIN_CONFIG)
+            msg = self.receive_check_msg(self.server_id, MessageType.TRAIN_CONFIG, time_out=10)
             client_dims = msg.data["client_dims"]
             out_dim = msg.data["out_dim"]
+            self.batch_size = msg.data["batch_size"]
             for other_id in client_dims:
                 self.other_paras[other_id] = np.random.normal(0, 1, [msg.data, out_dim])
             self.para = self.other_paras[self.client_id]
@@ -238,17 +312,16 @@ class DataClient(BaseClient):
             self.logger.logE("Python Exception encountered, stop calculating: \n" + traceback.format_exc())
             self.error = True
 
-        while not self.error:
+        while True:
+            train_res = self.__train_one_round()
             try:
-                self.receive_check_msg(self.server_id, MessageType.NEXT_TRAIN_ROUND)
-                self.__calc_out_share()
-                self.send_check_msg(self.server_id, ComputationMessage(MessageType.MUL_OUT_SHARE,
-                                                                       (self.own_out, self.shared_out_AB, self.shared_out_BA)))
-            except ClientException:
-                self.error = True
-            except Exception:
-                self.logger.logE("Python Exception encountered , stop calculating: \n" + traceback.format_exc())
-                self.error = True
+                self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_ROUND_OVER, train_res))
+            except:
+                self.logger.logE("Error encountered while sending round over message to server")
+                break
+            if not train_res:
+                self.logger.logE("Error encountered while training one round. Stop.")
+                break
 
 
 class LabelClient(BaseClient):
@@ -264,6 +337,8 @@ class LabelClient(BaseClient):
         else:
             self.loss_func = loss_func
 
+        self.error = False
+
         # cached labels
         self.labels = None
         self.compute_grad_thread = None
@@ -273,4 +348,47 @@ class LabelClient(BaseClient):
         loss = self.loss_func.forward(preds, self.labels)
         grad = self.loss_func.backward()
         self.send_check_msg(self.server_id, ComputationMessage(MessageType.PRED_GRAD, (grad, loss)))
+
+    def __train_one_round(self):
+        try:
+            start_msg = self.receive_check_msg(self.server_id,
+                                               [MessageType.NEXT_TRAIN_ROUND, MessageType.TRAINING_STOP])
+            if start_msg.header == MessageType.TRAINING_STOP:
+                self.logger.log("Received server's training stop message, stop training")
+                return False
+        except:
+            self.logger.logE("Error encountered while receiving server's start message")
+            self.error = True
+            return False
+
+        try:
+            self.__compute_pred_grad()
+        except:
+            self.logger.logE("Error encountered while computing prediction gradients")
+            return False
+
+        return True
+
+    def start_train(self):
+        # Get initial training configurations
+        try:
+            msg = self.receive_check_msg(self.server_id, MessageType.TRAIN_CONFIG, time_out=10)
+            self.batch_size = msg.data["batch_size"]
+            self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_READY, None))
+        except ClientException:
+            self.error = True
+        except Exception as e:
+            self.logger.logE("Python Exception encountered, stop calculating: \n" + traceback.format_exc())
+            self.error = True
+
+        while True:
+            train_res = self.__train_one_round()
+            try:
+                self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_ROUND_OVER, train_res))
+            except:
+                self.logger.logE("Error encountered while sending round over message to server")
+                break
+            if not train_res:
+                self.logger.logE("Error encountered while training one round. Stop.")
+                break
 
