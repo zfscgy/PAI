@@ -6,10 +6,11 @@ class BaseChannel:
     """
     Channel for communication
     """
-    def __init__(self, n_clients: int, logger: Logger=None):
+    def __init__(self, self_id: int, n_clients: int, logger: Logger=None):
         """
         :param n_clients: Number of clients that will Join this channel
         """
+        self.client_id = self_id
         self.n_clients = n_clients
         if logger is None:
             logger = Logger()

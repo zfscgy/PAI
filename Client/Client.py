@@ -20,13 +20,13 @@ class BaseClient:
     """
     Base class of client
     """
-    def __init__(self, client_id, channel: BaseChannel, logger: Logger=None):
+    def __init__(self, channel: BaseChannel, logger: Logger=None):
         """
         :param client_id: An integer to identify the client
         :type client_id: int
         :param channel: Channel for communication
         """
-        self.client_id = client_id
+        self.client_id = channel.client_id
         self.channel = channel
         if not logger:
             logger = Logger()
@@ -51,9 +51,9 @@ class BaseClient:
         :return:
         """
         msg = self.receive_msg(sender, time_out)
-        if (type(header) == MessageType and msg.header != header) or \
+        if msg is None or (type(header) == MessageType and msg.header != header) or \
                 (type(header) == list and msg.header not in header):
-            msg = "Expect message type %s, but get message type %s" % (str(msg.header), str(header))
+            msg = "Expect message type %s, but get message %s" % (str(header), str(msg))
             self.logger.logE(msg)
             raise ClientException("Receive check fails: " + msg)
         return msg

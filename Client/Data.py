@@ -1,32 +1,33 @@
 import numpy as np
 class DataLoader:
-    def __init__(self, batch_size):
-        self.batch_size = batch_size
-
     def sync_data(self, sync_info):
         raise NotImplementedError
 
-    def get_train_batch(self, batch_size=None):
-        raise NotImplementedError()
-
-    def get_test_batch(self, batch_size=None):
+    def get_batch(self, batch_size: int):
         raise NotImplementedError()
 
 
 class RandomDataLoader(DataLoader):
-    def __init__(self, dim, batch_size):
+    def __init__(self, dim):
         self.dim = dim
-        self.batch_size = batch_size
 
     def sync_data(self, sync_info):
         pass
 
-    def get_train_batch(self, batch_size=None):
-        if batch_size is None:
-            batch_size = self.batch_size
+    def get_batch(self, batch_size: int):
         return np.random.uniform(-1, 1, [batch_size, self.dim])
 
-    def get_test_batch(self, batch_size=None):
-        if batch_size is None:
-            batch_size = self.batch_size
-        return np.random.uniform(-1, 1, [batch_size, self.dim])
+
+class CSVDataLoader(DataLoader):
+    def __init__(self, csv_file_path, used_columns):
+        csv_data = np.loadtxt(csv_file_path, delimiter=",")
+        self.data = csv_data[:, used_columns]
+        self.random_generator = None
+
+    def sync_data(self, sync_info: dict):
+        seed = sync_info["seed"]
+        self.random_generator = np.random.default_rng(seed=seed)
+
+    def get_batch(self, batch_size: int):
+        indices = self.random_generator.choice(self.data.shape[0], batch_size)
+        return self.data[indices]

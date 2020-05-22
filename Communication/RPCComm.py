@@ -59,7 +59,8 @@ class Peer(BaseChannel):
     """
     客户端类。每个客户端也包含一个服务器用于监听其他客户端。
     """
-    def __init__(self, self_id, self_port: str, self_max_workers: int, ip_dict: dict, time_out: float=1):
+    def __init__(self, self_id, self_port: str, self_max_workers: int, ip_dict: dict, time_out: float=1,
+                 logger: Logger=None):
         """
         :param self_id: 客户端的ID，必须是唯一的
         :param self_port: 客户端监听的端口号
@@ -67,15 +68,14 @@ class Peer(BaseChannel):
         :param ip_dict: 一个dict，指定客户端id和ip地址的对应关系。
         :param time_out:
         """
-        super(Peer, self).__init__(len(ip_dict))
+        super(Peer, self).__init__(self_id, len(ip_dict), logger)
         self.server = ComputationRPCServer(self_port, self_max_workers, self.buffer_msg)
         self.rpc_clients = [ComputationRPCClient(ip_dict[client_num]) for client_num in ip_dict]
-        self.client_id = self_id
         self.ip_dict = ip_dict
         self.receive_buffer = [None for _ in ip_dict]
         self.time_out = time_out
         self.server.start()
-        self.logger.log("Client id %d started." % self.client_id)
+        self.logger.log("Peer id %d started." % self.client_id)
 
     def buffer_msg(self, msg, sender_id):
         """

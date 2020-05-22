@@ -13,8 +13,8 @@ class TripletsProvider(BaseClient):
     """
     A client for generate beaver triples. It can listen to other clients
     """
-    def __init__(self, client_id: int, channel: BaseChannel, logger:Logger=None):
-        super(TripletsProvider, self).__init__(client_id, channel, logger)
+    def __init__(self, channel: BaseChannel, logger:Logger=None):
+        super(TripletsProvider, self).__init__(channel, logger)
         self.triplets_id = self.client_id
         self.triplet_proposals = dict()
         self.listening_thread = [None for _ in range(channel.n_clients)]
@@ -24,24 +24,22 @@ class TripletsProvider(BaseClient):
         msg = self.receive_msg(sender)
         if msg is not None:
             if msg.header == MessageType.SET_TRIPLET:
-                target = msg.data[0]
-                shape_sender = msg.data[1]
-                shape_target = msg.data[2]
+                operand_sender, target, shape_sender, shape_target = msg.data
                 existing_shapes = self.triplet_proposals.get((target, sender))
                 if existing_shapes is not None:
-                    if existing_shapes[0] == shape_target and existing_shapes[1] == shape_sender:
-                        self.generate_and_send_triplets((sender, target), (shape_sender, shape_target))
+                    if existing_shapes[1] == shape_target and existing_shapes[2] == shape_sender:
+                        self.generate_and_send_triplets(existing_shapes[0], (target, sender), (shape_target, shape_sender))
                         del self.triplet_proposals[(target, sender)]
                     else:
                         self.logger.logW("Triplet shapes %s %s not match with clients %d and %d" % (shape_target, shape_sender, target, sender))
                 else:
-                    self.triplet_proposals[(sender, target)] = (shape_sender, shape_target)
+                    self.triplet_proposals[(sender, target)] = (operand_sender, shape_sender, shape_target)
             else:
                 self.logger.logW("Expect SET_TRIPLET message, but received %s from %d" % (msg.header, sender))
 
-    def generate_and_send_triplets(self, clients, shapes):
+    def generate_and_send_triplets(self, first_operand: int, clients, shapes):
         # 判断哪一个是乘数，哪一个是被乘数
-        if shapes[1][0] != shapes[0][1]:
+        if first_operand == 2:
             shapes = [shapes[1], shapes[0]]
             clients = [clients[1], clients[0]]
         u0 = np.random.uniform(-1, 1, shapes[0])
@@ -77,10 +75,10 @@ class TripletsProvider(BaseClient):
 
 
 class DataClient(BaseClient):
-    def __init__(self, client_id: int, channel: BaseChannel, data_loader: DataLoader,
-                 server_id: int, triplets_id: int, other_data_clients: list):
+    def __init__(self, channel: BaseChannel, data_loader: DataLoader,
+                 server_id: int, triplets_id: int, other_data_clients: list, logger: Logger=None):
         # random generate some to data
-        super(DataClient, self).__init__(client_id, channel)
+        super(DataClient, self).__init__(channel, logger)
         self.data_loader = data_loader
         self.batch_data = None
         self.server_id = server_id
@@ -111,19 +109,17 @@ class DataClient(BaseClient):
         :param other_id:
         :return:
         """
-        def get_next_batch():
-            self.batch_data = self.data_loader.get_train_batch()
 
         # 提供数据作为矩阵乘法中的乘数
         def set_triplet_AB():
             self.send_check_msg(self.triplets_id,
-                          ComputationMessage(MessageType.SET_TRIPLET, (other_id, self.batch_data.shape,
+                          ComputationMessage(MessageType.SET_TRIPLET, (1, other_id, self.batch_data.shape,
                                                                        self.para.shape)))
 
         # 提供参数作为矩阵乘法中的的被乘数
         def set_triplet_BA():
             self.send_check_msg(self.triplets_id,
-                          ComputationMessage(MessageType.SET_TRIPLET, (other_id, self.other_paras[other_id].shape,
+                          ComputationMessage(MessageType.SET_TRIPLET, (2, other_id, self.other_paras[other_id].shape,
                                                                        (self.batch_size, self.other_paras[other_id].shape[0]))))
 
         def get_triples():
@@ -193,7 +189,6 @@ class DataClient(BaseClient):
             get_own_value_share()
             get_shared_out_BA()
         try:
-            get_next_batch()
             if other_id < self.client_id:
                 calc_AB()
                 calc_BA()
@@ -204,7 +199,7 @@ class DataClient(BaseClient):
             self.logger.logE("Client Exception encountered, stop calculating.")
             self.error = True
         except Exception as e:
-            self.logger.logE("Python Exception encountered , stop calculating: \n" + traceback.format_exc())
+            self.logger.logE("Python Exception encountered , stop calculating.")
             self.error = True
         finally:
             return
@@ -230,7 +225,7 @@ class DataClient(BaseClient):
             self.logger.logE("Error encountered while sending parameter updates to other data clients")
             self.error = True
 
-    def __recv_updates_from(self, client_id: int, updates: np.ndarray):
+    def __recv_updates_from(self, client_id: int):
         try:
             update_msg = self.receive_check_msg(client_id, MessageType.CLIENT_PARA_UPDATE)
             self.other_paras[client_id] -= self.learning_rate * update_msg.data
@@ -239,11 +234,11 @@ class DataClient(BaseClient):
             self.error = True
 
     def __parameter_update(self):
-        updates = self.receive_check_msg(self.server_id, MessageType.CLIENT_OUT_GRAD)
-        own_para_grad = self.batch_data.traspose() @ updates
+        updates = self.receive_check_msg(self.server_id, MessageType.CLIENT_OUT_GRAD).data
+        own_para_grad = self.batch_data.transpose() @ updates
         portion = np.random.uniform(0, 1, len(self.other_data_clients) + 1)
         portion /= np.sum(portion)
-        self.para -= self.learning_rate * own_para_grad
+        self.para -= self.learning_rate * own_para_grad * portion[0]
         send_update_threads = []
         for i, data_client in enumerate(self.other_data_clients):
             send_update_threads.append(threading.Thread(
@@ -271,6 +266,8 @@ class DataClient(BaseClient):
             self.logger.logE("Error encountered while receiving server's start message")
             return False
 
+        self.batch_data = self.data_loader.get_batch(self.batch_size)
+
         self.__calc_out_share()
         if self.error:
             self.logger.logE("Error encountered while calculating shared outputs")
@@ -295,25 +292,37 @@ class DataClient(BaseClient):
 
         return True
 
-    def start_train(self):
+    def start_train(self, wait_for_server: float=100):
         # Get initial training configurations
+        self.logger.log("Client started, waiting for server config message with time out %.2f" % wait_for_server)
         try:
-            msg = self.receive_check_msg(self.server_id, MessageType.TRAIN_CONFIG, time_out=10)
+            msg = self.receive_check_msg(self.server_id, MessageType.TRAIN_CONFIG, time_out=wait_for_server)
             client_dims = msg.data["client_dims"]
             out_dim = msg.data["out_dim"]
             self.batch_size = msg.data["batch_size"]
+            self.learning_rate = msg.data["learning_rate"]
+            self.data_loader.sync_data(msg.data["sync_info"])
             for other_id in client_dims:
-                self.other_paras[other_id] = np.random.normal(0, 1, [msg.data, out_dim])
+                self.other_paras[other_id] = \
+                    np.random.normal(0,
+                                     1/(len(self.other_data_clients) * client_dims[other_id]),
+                                     [client_dims[other_id], out_dim])
             self.para = self.other_paras[self.client_id]
             self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_READY, None))
         except ClientException:
-            self.error = True
+            self.logger.logE("Train not started")
+            return
         except Exception as e:
-            self.logger.logE("Python Exception encountered, stop calculating: \n" + traceback.format_exc())
-            self.error = True
+            self.logger.logE("Python Exception encountered, stop.")
+            self.logger.logE("Train not started")
+            return
+        self.logger.log("Received train conifg message: %s" % msg.data)
 
+        n_rounds = 0
         while True:
             train_res = self.__train_one_round()
+            n_rounds += 1
+            self.logger.log("Train round %d finished" % n_rounds)
             try:
                 self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_ROUND_OVER, train_res))
             except:
@@ -325,27 +334,29 @@ class DataClient(BaseClient):
 
 
 class LabelClient(BaseClient):
-    def __init__(self, client_id: int, channel: BaseChannel, label_loader: DataLoader,
-                 batch_size: int, label_dim: int, server_id: int, loss_func=None):
-        super(LabelClient, self).__init__(client_id, channel)
+    def __init__(self, channel: BaseChannel, label_loader: DataLoader,
+                 server_id: int, loss_func=None, logger:Logger=None):
+        super(LabelClient, self).__init__(channel, logger)
         self.label_loader = label_loader
-        self.batch_size = batch_size
-        self.label_dim = label_dim
+
+        self.batch_size = None
         self.server_id = server_id
         if loss_func is None:
-            self.loss_func = MSELoss
+            self.loss_func = MSELoss()
         else:
             self.loss_func = loss_func
 
         self.error = False
 
         # cached labels
-        self.labels = None
+        self.batch_labels = None
         self.compute_grad_thread = None
 
     def __compute_pred_grad(self):
         preds = self.receive_check_msg(self.server_id, MessageType.PRED_LABEL)
-        loss = self.loss_func.forward(preds, self.labels)
+        loss = self.loss_func.forward(self.batch_labels, preds.data)
+        acc = np.mean(np.argmax(self.batch_labels, 1) == np.argmax(preds.data, 1))
+        self.logger.log("Current batch loss: %.4f, accuracy: %.4f" % (loss, acc))
         grad = self.loss_func.backward()
         self.send_check_msg(self.server_id, ComputationMessage(MessageType.PRED_GRAD, (grad, loss)))
 
@@ -358,7 +369,11 @@ class LabelClient(BaseClient):
                 return False
         except:
             self.logger.logE("Error encountered while receiving server's start message")
-            self.error = True
+            return False
+        try:
+            self.batch_labels = self.label_loader.get_batch(self.batch_size)
+        except:
+            self.logger.logE("Error encountered while loading batch labels")
             return False
 
         try:
@@ -369,20 +384,29 @@ class LabelClient(BaseClient):
 
         return True
 
-    def start_train(self):
+    def start_train(self, wait_for_server:float=100):
         # Get initial training configurations
+        self.logger.log("Client started, waiting for server config message with time out %.2f" % wait_for_server)
         try:
-            msg = self.receive_check_msg(self.server_id, MessageType.TRAIN_CONFIG, time_out=10)
+            msg = self.receive_check_msg(self.server_id, MessageType.TRAIN_CONFIG, time_out=wait_for_server)
             self.batch_size = msg.data["batch_size"]
+            self.label_loader.sync_data(msg.data["sync_info"])
             self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_READY, None))
         except ClientException:
-            self.error = True
+            self.logger.logE("Train not started")
+            return
         except Exception as e:
-            self.logger.logE("Python Exception encountered, stop calculating: \n" + traceback.format_exc())
-            self.error = True
+            self.logger.logE("Python Exception encountered, stop\n")
+            self.logger.logE("Train not started")
+            return
 
+        self.logger.log("Received train conifg message: %s" % msg.data)
+
+        n_rounds = 0
         while True:
             train_res = self.__train_one_round()
+            n_rounds += 1
+            self.logger.log("Train round %d finished" % n_rounds)
             try:
                 self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_ROUND_OVER, train_res))
             except:
@@ -391,4 +415,3 @@ class LabelClient(BaseClient):
             if not train_res:
                 self.logger.logE("Error encountered while training one round. Stop.")
                 break
-

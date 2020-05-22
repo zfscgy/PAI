@@ -24,12 +24,14 @@ class MSELoss(LossFunc):
         self.pred_ys = None
 
     def forward(self, ys, pred_ys):
+        self.ys = ys
+        self.pred_ys = pred_ys
         return np.mean(np.square(ys - pred_ys))
 
     def backward(self):
         if self.ys is None:
             raise LossException("Cannot backward before forward")
-        grad = 2 * (self.pred_ys - self.ys)
+        grad = 2 * (self.pred_ys - self.ys) / (self.ys.shape[1] * self.ys.shape[0])
         self.ys = None
         self.pred_ys = None
         return grad
