@@ -35,6 +35,8 @@ class MessageType(Enum):
     NEXT_TRAIN_ROUND = 17
     """
     Client start next training round
+    the data usually is None
+    If the data is "Test", then this round should be performed in test mode
     """
 
     PARA_GRAD = 18

@@ -19,9 +19,9 @@ class RandomDataLoader(DataLoader):
 
 
 class CSVDataLoader(DataLoader):
-    def __init__(self, csv_file_path, used_columns):
+    def __init__(self, csv_file_path, used_rows, used_columns):
         csv_data = np.loadtxt(csv_file_path, delimiter=",")
-        self.data = csv_data[:, used_columns]
+        self.data = csv_data[:, used_columns][used_rows]
         self.random_generator = None
 
     def sync_data(self, sync_info: dict):

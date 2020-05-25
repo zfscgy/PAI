@@ -25,6 +25,10 @@ class MainTFClient(BaseClient):
         self.network_out = None
         self.tape = None
 
+
+        self.test_per_batch = None
+        self.test_mode = False
+
     def build_network(self, network: k.Model, optimizer: k.optimizers):
         self.network = network
         self.optimizer = optimizer
@@ -48,6 +52,9 @@ class MainTFClient(BaseClient):
         except:
             self.logger.logE("Error encountered while receiving client ready message fom client %d" % client_id)
             self.error = True
+
+    def set_config_message(self, config: dict):
+        self.test_per_batch = config["test_per_batch"]
 
     def send_config_message(self, config: dict):
         sending_threads = []
@@ -79,7 +86,10 @@ class MainTFClient(BaseClient):
                 header = MessageType.NEXT_TRAIN_ROUND
             else:
                 header = MessageType.TRAINING_STOP
-            self.send_check_msg(client_id, ComputationMessage(header, None))
+            start_data = None
+            if self.test_mode:
+                start_data = "Test"
+            self.send_check_msg(client_id, ComputationMessage(header, start_data))
         except:
             self.error = True
 
@@ -201,16 +211,17 @@ class MainTFClient(BaseClient):
             self.logger.logE("Error encountered while getting server output gradient")
             return False
 
-        try:
-            input_grad = self.__calculate_grad(grad_server_out)
-        except:
-            self.logger.logE("Python Error encountered while calculating gradient:\n" + traceback.format_exc())
-            return False
+        if not self.test_mode:
+            try:
+                input_grad = self.__calculate_grad(grad_server_out)
+            except:
+                self.logger.logE("Python Error encountered while calculating gradient:\n" + traceback.format_exc())
+                return False
 
-        self.__send_grads(input_grad)
-        if self.error:
-            self.logger.logE("Error encountered while sending grads to clients")
-            return False
+            self.__send_grads(input_grad)
+            if self.error:
+                self.logger.logE("Error encountered while sending grads to clients")
+                return False
 
         self.__receive_round_over_msgs()
         if self.error:
@@ -222,7 +233,10 @@ class MainTFClient(BaseClient):
     def start_train(self):
         n_rounds = 0
         while True:
+            if n_rounds % self.test_per_batch == 0:
+                self.test_mode = True
             train_res = self.__train_one_batch()
+            self.test_mode = False
             n_rounds += 1
             self.logger.log("Train round %d finished" % n_rounds)
             self.logger.log("One train round finished")

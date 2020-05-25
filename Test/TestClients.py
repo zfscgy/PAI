@@ -1,12 +1,12 @@
 import threading
 import time
 
-
 from Communication.RPCComm import Peer
 from Client.DataProviders import DataClient, TripletsProvider, LabelClient
 from Client.ComputationProviders import MainTFClient
 from Utils.Log import Logger
 from Client.Data import RandomDataLoader, CSVDataLoader
+
 
 def test_mpc():
     print("\n======== Test mpc NN protocol ============\n")
@@ -66,6 +66,7 @@ def test_mpc():
 
     print("====== MPC NN Test finished =============")
 
+
 def test_mpc_mnist():
     print("\n======== Test mpc NN protocol with MNIST Dataset ============\n")
     ip_dict = {
@@ -82,27 +83,40 @@ def test_mpc_mnist():
     channel4 = Peer(4, "[::]:19005", 10, ip_dict, 3, logger=Logger(prefix="Channel4:"))
     main_client = MainTFClient(channel0, [2, 3], 4, logger=Logger(prefix="Main client:"))
     triplets_provider = TripletsProvider(channel1, logger=Logger(prefix="Triplet provider:"))
-    data_client0 = DataClient(channel2, CSVDataLoader("Test/TestDataset/mnist.csv", list(range(300))),
-                              server_id=0, triplets_id=1, other_data_clients=[3], logger=Logger(prefix="Data client 0:"))
-    data_client1 = DataClient(channel3, CSVDataLoader("Test/TestDataset/mnist.csv", list(range(300, 784))),
-                              server_id=0, triplets_id=1, other_data_clients=[2], logger=Logger(prefix="Data client 1:"))
-    label_client = LabelClient(channel4, CSVDataLoader("Test/TestDataset/mnist.csv", list(range(784, 794))),
+    data_client0 = DataClient(channel2,
+                              CSVDataLoader("Test/TestDataset/mnist.csv", list(range(50000)), list(range(300))),
+                              CSVDataLoader("Test/TestDataset/mnist.csv", list(range(50000, 55000)), list(range(300))),
+                              server_id=0, triplets_id=1, other_data_clients=[3],
+                              logger=Logger(prefix="Data client 0:"))
+    data_client1 = DataClient(channel3,
+                              CSVDataLoader("Test/TestDataset/mnist.csv", list(range(50000)), list(range(300, 784))),
+                              CSVDataLoader("Test/TestDataset/mnist.csv", list(range(50000, 55000)),
+                                            list(range(300, 784))),
+                              server_id=0, triplets_id=1, other_data_clients=[2],
+                              logger=Logger(prefix="Data client 1:"))
+    label_client = LabelClient(channel4,
+                               CSVDataLoader("Test/TestDataset/mnist.csv", list(range(50000)), list(range(784, 794))),
+                               CSVDataLoader("Test/TestDataset/mnist.csv", list(range(50000, 55000)),
+                                             list(range(784, 794))),
                                server_id=0, logger=Logger(prefix="Lable client:"))
     triplets_provider.start_listening()
     data_client0_th = threading.Thread(target=data_client0.start_train)
     data_client1_th = threading.Thread(target=data_client1.start_train)
     label_client_th = threading.Thread(target=label_client.start_train)
+    config = {
+        "client_dims": {2: 300, 3: 484},
+        "out_dim": 150,
+        "batch_size": 32,
+        "test_per_batch": 100,
+        "learning_rate": 0.01,
+        "sync_info": {
+            "seed": 8964
+        }
+    }
+    main_client.set_config_message(config)
     main_client_send_config_th = threading.Thread(
         target=main_client.send_config_message,
-        args=({
-                  "client_dims": {2: 300, 3: 484},
-                  "out_dim": 150,
-                  "batch_size": 32,
-                  "learning_rate": 0.01,
-                  "sync_info": {
-                      "seed": 8964
-                  }
-              },)
+        args=(config,)
     )
 
     data_client0_th.start()
@@ -127,6 +141,7 @@ def test_mpc_mnist():
     label_client_th.join()
 
     print("====== MPC NN Test finished =============")
+
 
 # test_mpc()
 test_mpc_mnist()
