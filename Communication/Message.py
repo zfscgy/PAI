@@ -84,7 +84,7 @@ class ComputationMessage:
     """
     Message class
     """
-    def __init__(self, header: MessageType, data):
+    def __init__(self, header: MessageType, data, key=None):
         """
         :param header:  Header of the message, specify the type of message
         :param data: Message data
@@ -93,6 +93,7 @@ class ComputationMessage:
         """
         self.header = header
         self.data = data
+        self.key = key
 
     def __str__(self):
-        return "header:" + self.header.__str__() + "\ndata:" + self.data.__str__() + "\n"
+        return "header:" + self.header.__str__() + "\ndata:" + self.data.__str__() + "\n" + self.key.__str__() + "\n"

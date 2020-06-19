@@ -2,7 +2,8 @@ import threading
 import time
 
 from Communication.RPCComm import Peer
-from Client.DataProviders import DataClient, TripletsProvider, LabelClient
+from Client.DataProviders import DataClient, LabelClient
+from Client.SMCProvider import TripletsProvider
 from Client.ComputationProviders import MainTFClient
 from Utils.Log import Logger
 from Client.Data import RandomDataLoader, CSVDataLoader
@@ -67,7 +68,7 @@ def test_mpc():
     print("====== MPC NN Test finished =============")
 
 
-def test_mpc_mnist():
+def test_2pc_mnist():
     print("\n======== Test mpc NN protocol with MNIST Dataset ============\n")
     ip_dict = {
         0: "127.0.0.1:19001",
@@ -108,6 +109,7 @@ def test_mpc_mnist():
         "out_dim": 150,
         "batch_size": 32,
         "test_per_batch": 100,
+        "test_batch_size": 1000,
         "learning_rate": 0.01,
         "sync_info": {
             "seed": 8964
@@ -144,4 +146,5 @@ def test_mpc_mnist():
 
 
 # test_mpc()
-test_mpc_mnist()
+if __name__ == "__main__":
+    test_2pc_mnist()

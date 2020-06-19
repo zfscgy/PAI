@@ -23,21 +23,24 @@ class MainTFClient(BaseClient):
         self.network = None
         self.optimizer = None
         self.network_out = None
-        self.tape = None
-
+        self.gradient_tape = None
 
         self.test_per_batch = None
         self.test_mode = False
 
-    def build_network(self, network: k.Model, optimizer: k.optimizers):
+    def build_network(self, network: k.Model, optimizer: k.optimizers, in_dim):
         self.network = network
         self.optimizer = optimizer
+        self.network.build((None, in_dim))
+        # Do a prediction to initialize the network
+        o = self.network(np.random.normal(size=[100, in_dim]))
 
     def build_default_network(self, input_dim: int, output_dim: int):
-        self.network = k.Sequential([
+        network = k.Sequential([
             k.layers.Activation(activation=k.activations.sigmoid, input_shape=(None, input_dim)),
             k.layers.Dense(output_dim, activation=k.activations.sigmoid)])
-        self.optimizer = k.optimizers.SGD()
+        optimizer = k.optimizers.SGD()
+        self.build_network(network, optimizer, input_dim)
 
     def __send_config_to(self, client_id: int, config: dict):
         try:
@@ -135,7 +138,7 @@ class MainTFClient(BaseClient):
         self.input_tensor = tf.Variable(input_np, dtype=tf.float32)
         with tf.GradientTape(persistent=True) as tape:
             self.network_out = self.network(self.input_tensor)
-        self.tape = tape
+        self.gradient_tape = tape
 
     def __get_output_grad(self):
         self.send_check_msg(self.label_client, ComputationMessage(MessageType.PRED_LABEL, self.network_out.numpy()))
@@ -143,13 +146,13 @@ class MainTFClient(BaseClient):
         return grad_server_out.data[0]
 
     def __calculate_grad(self, grad_on_output):
-        model_jacobians = self.tape.jacobian(self.network_out, self.network.trainable_variables)
+        model_jacobians = self.gradient_tape.jacobian(self.network_out, self.network.trainable_variables)
         model_grad = [tf.reduce_sum(model_jacobian * (tf.reshape(grad_on_output.astype(np.float32),
                                                                 list(grad_on_output.shape) + [1 for i in range(len(model_jacobian.shape) - 2)]) +\
                                                       tf.zeros_like(model_jacobian, dtype=model_jacobian.dtype)),
                                     axis=[0, 1]) for model_jacobian in model_jacobians]
         self.optimizer.apply_gradients(zip(model_grad, self.network.trainable_variables))
-        input_jacobian = self.tape.jacobian(self.network_out, self.input_tensor)
+        input_jacobian = self.gradient_tape.jacobian(self.network_out, self.input_tensor)
         input_grad = tf.reduce_sum(input_jacobian * (tf.reshape(grad_on_output.astype(np.float32),
                                                                list(grad_on_output.shape) + [1 for i in range(len(input_jacobian.shape) - 2)]) +
                                    tf.zeros_like(self.input_tensor, dtype=self.input_tensor.dtype)),
@@ -190,39 +193,66 @@ class MainTFClient(BaseClient):
             thread.join()
 
     def __train_one_batch(self):
+        """
+        :return:
+        """
+
+        """
+        Broadcast start message to every client
+        Including data clients and label client
+        """
         self.__broadcast_start()
         if self.error:
             self.logger.logE("Error encountered while broadcasting start messages")
             return False
 
+        """
+        Receive data clients output as first layer output
+        """
         client_outputs = self.__gather_client_outs()
         if self.error:
             self.logger.logE("Error encountered while gathering client outputs")
             return False
 
+        """
+        Input clients first layer's output and pass it to the Tensorflow Model to get server's output
+        """
         self.__calculate_output(client_outputs)
         if self.error:
             self.logger.logE("Error encountered while calculating server output")
             return False
 
+        """
+        Send server's output to label client, get gradients (Jacobian matrix of dLoss/dPrediction)
+        """
         try:
             grad_server_out = self.__get_output_grad()
         except:
             self.logger.logE("Error encountered while getting server output gradient")
             return False
 
+        """
+        If not in the test mode, update the model in the server and calculate the gradient with regard to the 
+        data clients' output. (Jacobina matrix of dLoss/dClientOutput)
+        """
         if not self.test_mode:
             try:
                 input_grad = self.__calculate_grad(grad_server_out)
             except:
                 self.logger.logE("Python Error encountered while calculating gradient:\n" + traceback.format_exc())
                 return False
-
+            """
+            Send data clients' gradients to all dataclients
+            """
             self.__send_grads(input_grad)
             if self.error:
                 self.logger.logE("Error encountered while sending grads to clients")
                 return False
 
+        """
+        Receive clients' round over messages
+        When data clients finish the parameter update process, it should send a round over message to server
+        """
         self.__receive_round_over_msgs()
         if self.error:
             self.logger.logE("Error encountered while receiving client round over messages")
@@ -239,7 +269,6 @@ class MainTFClient(BaseClient):
             self.test_mode = False
             n_rounds += 1
             self.logger.log("Train round %d finished" % n_rounds)
-            self.logger.log("One train round finished")
             if not train_res:
                 self.logger.logE("Training stopped due to error")
                 self.__broadcast_start(stop=True)

@@ -22,5 +22,5 @@ class BaseChannel:
         """
         raise NotImplementedError()
 
-    def receive(self, sender: int, time_out: float):
+    def receive(self, sender: int, time_out: float, key=None):
         raise NotImplementedError()

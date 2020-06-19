@@ -76,7 +76,7 @@
 | ------------- | ---------------------------------------------- | -------------------------------------- | ------------------------ |
 | Preparing     |                                                | TRAIN_CONFIG **→ All**                 |                          |
 |               | CLIENT_READY **→Server**                       |                                        | **Server←** CLIENT_READY |
-| Training loop |                                                | CLIENT_START **→ All**                 |                          |
+| Training loop |                                                | NEXT_TRAIN_ROUND **→ All**             |                          |
 |               | *doing hidden layer computations....*          |                                        |                          |
 |               | MUL_OUT_SHARE **→Server**                      |                                        |                          |
 |               |                                                | *calculating server outputs*           |                          |

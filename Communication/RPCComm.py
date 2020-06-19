@@ -11,12 +11,9 @@ from Communication.Message import MessageType, ComputationMessage
 from Utils.Log import Logger
 
 
-
-
 def encode_ComputationData(computation_message: ComputationMessage):
     return message_pb2.ComputationData(type=computation_message.header.value,
                                        python_bytes=pickle.dumps(computation_message.data))
-
 
 def decode_ComputationData(computation_data: message_pb2.ComputationData):
     return ComputationMessage(MessageType(computation_data.type), pickle.loads(computation_data.python_bytes))
@@ -24,7 +21,7 @@ def decode_ComputationData(computation_data: message_pb2.ComputationData):
 
 class ComputationRPCClient:
     def __init__(self, address):
-        self.channel = grpc.insecure_channel(address)
+        self.channel = grpc.insecure_channel(address, options=[('grpc.max_receive_message_length', 10 * 1024 * 1024)])
         self.stub = message_pb2_grpc.MPCServiceStub(self.channel)
 
     def sendComputationMessage(self, computation_message, client_id):
@@ -47,7 +44,8 @@ class ComputationServicer(message_pb2_grpc.MPCServiceServicer):
 
 class ComputationRPCServer:
     def __init__(self, port, max_workers, msg_handler):
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers),
+                                  options=[('grpc.max_receive_message_length', 10 * 1024 * 1024)])
         message_pb2_grpc.add_MPCServiceServicer_to_server(ComputationServicer(msg_handler), self.server)
         self.server.add_insecure_port(port)
 
@@ -72,12 +70,12 @@ class Peer(BaseChannel):
         self.server = ComputationRPCServer(self_port, self_max_workers, self.buffer_msg)
         self.rpc_clients = [ComputationRPCClient(ip_dict[client_num]) for client_num in ip_dict]
         self.ip_dict = ip_dict
-        self.receive_buffer = [None for _ in ip_dict]
+        self.receive_buffer = [dict() for _ in ip_dict]
         self.time_out = time_out
         self.server.start()
         self.logger.log("Peer id %d started." % self.client_id)
 
-    def buffer_msg(self, msg, sender_id):
+    def buffer_msg(self, msg: ComputationMessage, sender_id):
         """
         将接收到的信息进行缓存
         :param msg:
@@ -86,16 +84,17 @@ class Peer(BaseChannel):
         """
         if sender_id in self.ip_dict:
             msg_received_time = time.time()
-            while self.receive_buffer[sender_id] is not None:
+            while self.receive_buffer[sender_id].get(msg.key) is not None:
                 time.sleep(0.01)
                 if time.time() > msg_received_time + self.time_out:
-                    self.logger.log("Timeout while wating for buffer for sender %d. Time elapsed %.3f" % (sender_id, self.time_out))
+                    self.logger.log("Timeout while wating for buffer for sender %d. Time elapsed %.3f. Message in the buffer %s"
+                                    % (sender_id, self.time_out, self.receive_buffer[sender_id][msg.key]))
                     return False
-            self.receive_buffer[sender_id] = msg
+            self.receive_buffer[sender_id][msg.key] = msg
             return True
         return None
 
-    def receive(self, sender: int, time_out: float=None):
+    def receive(self, sender: int, time_out: float, key=None):
         """
         :param sender: 发送方
         :param time_out: 接收的延时。如果未设置则采用默认延时。
@@ -104,13 +103,13 @@ class Peer(BaseChannel):
         if not time_out:
             time_out = self.time_out
         start_receive_time = time.time()
-        while self.receive_buffer[sender] is None:
+        while self.receive_buffer[sender].get(key) is None:
             time.sleep(0.01)
             if time.time() - start_receive_time > time_out:
                 self.logger.log("Timeout while receiving from client %d. Time elapsed %.3f" % (sender, time_out))
                 return None
-        msg = self.receive_buffer[sender]
-        self.receive_buffer[sender] = None
+        msg = self.receive_buffer[sender][key]
+        self.receive_buffer[sender][key] = None
         return msg
 
     def send(self, receiver: int, msg: ComputationMessage, time_out: float=None):

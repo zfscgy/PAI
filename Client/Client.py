@@ -40,10 +40,10 @@ class BaseClient:
         """
         return self.channel.send(receiver, msg, time_out)
 
-    def receive_msg(self, sender: int, time_out=None):
-        return self.channel.receive(sender, time_out)
+    def receive_msg(self, sender: int, time_out=None, key=None):
+        return self.channel.receive(sender, time_out, key)
 
-    def receive_check_msg(self, sender: int, header, time_out=None):
+    def receive_check_msg(self, sender: int, header, time_out=None, key=None):
         """
         :param sender:
         :param header: can be MessageType or list of MessageType
