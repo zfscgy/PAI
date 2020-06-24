@@ -35,6 +35,12 @@ class MainTFClient(BaseClient):
         # Do a prediction to initialize the network
         o = self.network(np.random.normal(size=[100, in_dim]))
 
+    def build_mlp_network(self, input_dim:int, layers:list):
+        network = k.Sequential([k.layers.Activation(k.activations.sigmoid, input_shape=(input_dim,))] +
+                               [k.layers.Dense(layer, activation=k.activations.sigmoid) for layer in layers])
+        optimizer = k.optimizers.SGD()
+        self.build_network(network, optimizer, input_dim)
+
     def build_default_network(self, input_dim: int, output_dim: int):
         network = k.Sequential([
             k.layers.Activation(activation=k.activations.sigmoid, input_shape=(None, input_dim)),
@@ -56,10 +62,10 @@ class MainTFClient(BaseClient):
             self.logger.logE("Error encountered while receiving client ready message fom client %d" % client_id)
             self.error = True
 
-    def set_config_message(self, config: dict):
+    def __set_config_message(self, config: dict):
         self.test_per_batch = config["test_per_batch"]
 
-    def send_config_message(self, config: dict):
+    def __send_config_message(self, config: dict):
         sending_threads = []
         for data_client in self.data_clients + [self.label_client]:
             sending_threads.append(threading.Thread(
@@ -146,12 +152,13 @@ class MainTFClient(BaseClient):
         return grad_server_out.data[0]
 
     def __calculate_grad(self, grad_on_output):
-        model_jacobians = self.gradient_tape.jacobian(self.network_out, self.network.trainable_variables)
-        model_grad = [tf.reduce_sum(model_jacobian * (tf.reshape(grad_on_output.astype(np.float32),
-                                                                list(grad_on_output.shape) + [1 for i in range(len(model_jacobian.shape) - 2)]) +\
-                                                      tf.zeros_like(model_jacobian, dtype=model_jacobian.dtype)),
-                                    axis=[0, 1]) for model_jacobian in model_jacobians]
-        self.optimizer.apply_gradients(zip(model_grad, self.network.trainable_variables))
+        if len(self.network.trainable_variables) != 0:
+            model_jacobians = self.gradient_tape.jacobian(self.network_out, self.network.trainable_variables)
+            model_grad = [tf.reduce_sum(model_jacobian * (tf.reshape(grad_on_output.astype(np.float32),
+                                                                    list(grad_on_output.shape) + [1 for i in range(len(model_jacobian.shape) - 2)]) +\
+                                                          tf.zeros_like(model_jacobian, dtype=model_jacobian.dtype)),
+                                        axis=[0, 1]) for model_jacobian in model_jacobians]
+            self.optimizer.apply_gradients(zip(model_grad, self.network.trainable_variables))
         input_jacobian = self.gradient_tape.jacobian(self.network_out, self.input_tensor)
         input_grad = tf.reduce_sum(input_jacobian * (tf.reshape(grad_on_output.astype(np.float32),
                                                                list(grad_on_output.shape) + [1 for i in range(len(input_jacobian.shape) - 2)]) +
@@ -260,7 +267,9 @@ class MainTFClient(BaseClient):
 
         return True
 
-    def start_train(self):
+    def start_train(self, config):
+        self.__set_config_message(config)
+        self.__send_config_message(config)
         n_rounds = 0
         while True:
             if n_rounds % self.test_per_batch == 0:

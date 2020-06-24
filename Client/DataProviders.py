@@ -384,7 +384,7 @@ class LabelClient(BaseClient):
         preds = self.receive_check_msg(self.server_id, MessageType.PRED_LABEL).data
         loss = self.loss_func.forward(self.batch_labels, preds)
 
-        self.logger.log("Current batch loss: %.4f, accuracy: %.4f" % (loss, self.metric_func(self.batch_labels, preds)))
+        self.logger.log("Current batch loss: %.4f, metric value: %.4f" % (loss, self.metric_func(self.batch_labels, preds)))
         grad = self.loss_func.backward()
         self.send_check_msg(self.server_id, ComputationMessage(MessageType.PRED_GRAD, (grad, loss)))
 

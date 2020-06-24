@@ -29,5 +29,7 @@ class CSVDataLoader(DataLoader):
         self.random_generator = np.random.default_rng(seed=seed)
 
     def get_batch(self, batch_size: int):
+        if batch_size is None:
+            return self.data
         indices = self.random_generator.choice(self.data.shape[0], batch_size)
         return self.data[indices]
