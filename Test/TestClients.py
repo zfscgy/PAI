@@ -1,5 +1,6 @@
 import threading
 import time
+import numpy as np
 from sklearn.metrics import roc_auc_score
 
 
@@ -79,11 +80,11 @@ def test_2pc_mnist():
         3: "127.0.0.1:19004",
         4: "127.0.0.1:19005"
     }
-    channel0 = Peer(0, "[::]:19001", 10, ip_dict, 3, logger=Logger(prefix="Channel0:"))
-    channel1 = Peer(1, "[::]:19002", 10, ip_dict, 3, logger=Logger(prefix="Channel1:", level=1))
-    channel2 = Peer(2, "[::]:19003", 10, ip_dict, 3, logger=Logger(prefix="Channel2:"))
-    channel3 = Peer(3, "[::]:19004", 10, ip_dict, 3, logger=Logger(prefix="Channel3:"))
-    channel4 = Peer(4, "[::]:19005", 10, ip_dict, 3, logger=Logger(prefix="Channel4:"))
+    channel0 = Peer(0, "[::]:19001", 10, ip_dict, 13, logger=Logger(prefix="Channel0:"))
+    channel1 = Peer(1, "[::]:19002", 10, ip_dict, 13, logger=Logger(prefix="Channel1:", level=1))
+    channel2 = Peer(2, "[::]:19003", 10, ip_dict, 13, logger=Logger(prefix="Channel2:"))
+    channel3 = Peer(3, "[::]:19004", 10, ip_dict, 13, logger=Logger(prefix="Channel3:"))
+    channel4 = Peer(4, "[::]:19005", 10, ip_dict, 13, logger=Logger(prefix="Channel4:"))
     main_client = MainTFClient(channel0, [2, 3], 4, logger=Logger(prefix="Main client:"))
     triplets_provider = TripletsProvider(channel1, logger=Logger(prefix="Triplet provider:"))
     data_client0 = DataClient(channel2,
@@ -155,11 +156,11 @@ def test_credit_data_2pc():
         3: "127.0.0.1:19004",
         4: "127.0.0.1:19005"
     }
-    channel0 = Peer(0, "[::]:19001", 10, ip_dict, 3, logger=Logger(prefix="Channel0:"))
-    channel1 = Peer(1, "[::]:19002", 10, ip_dict, 3, logger=Logger(prefix="Channel1:", level=1))
-    channel2 = Peer(2, "[::]:19003", 10, ip_dict, 3, logger=Logger(prefix="Channel2:"))
-    channel3 = Peer(3, "[::]:19004", 10, ip_dict, 3, logger=Logger(prefix="Channel3:"))
-    channel4 = Peer(4, "[::]:19005", 10, ip_dict, 3, logger=Logger(prefix="Channel4:"))
+    channel0 = Peer(0, "[::]:19001", 10, ip_dict, 13, logger=Logger(prefix="Channel0:"))
+    channel1 = Peer(1, "[::]:19002", 10, ip_dict, 13, logger=Logger(prefix="Channel1:", level=1))
+    channel2 = Peer(2, "[::]:19003", 10, ip_dict, 13, logger=Logger(prefix="Channel2:"))
+    channel3 = Peer(3, "[::]:19004", 10, ip_dict, 13, logger=Logger(prefix="Channel3:"))
+    channel4 = Peer(4, "[::]:19005", 10, ip_dict, 13, logger=Logger(prefix="Channel4:"))
 
     main_client = MainTFClient(channel0, [2, 3], 4, logger=Logger(prefix="Main client:"))
     triplets_provider = TripletsProvider(channel1, logger=Logger(prefix="Triplet provider:"))
@@ -187,9 +188,10 @@ def test_credit_data_2pc():
         "client_dims": {2: 30, 3: 42},
         "out_dim": 1,
         "batch_size": 256,
-        "test_per_batch": 100,
+        "test_per_batch": 101,
         "test_batch_size": None,
         "learning_rate": 0.01,
+        "max_iter": 102,
         "sync_info": {
             "seed": 8964
         }
@@ -204,20 +206,20 @@ def test_credit_data_2pc():
     data_client0_th = threading.Thread(target=data_client0.start_train)
     data_client1_th = threading.Thread(target=data_client1.start_train)
     label_client_th = threading.Thread(target=label_client.start_train)
+    triplets_provider.start_listening()
     data_client0_th.start()
     data_client1_th.start()
     label_client_th.start()
+    time.sleep(1)
     main_client_start_th.start()
-    triplets_provider.start_listening()
     print("====== Stop the triplet provider, the training should be auto exited =========")
-    time.sleep(2000)
-    triplets_provider.stop_listening()
     main_client_start_th.join()
     data_client0_th.join()
     data_client1_th.join()
     label_client_th.join()
-
     print("====== MPC NN Test finished =============")
+    np.savetxt("mpc_record.csv", label_client.metrics_record, delimiter=",")
+    triplets_provider.stop_listening()
 
 
 if __name__ == "__main__":

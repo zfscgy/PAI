@@ -12,11 +12,13 @@ from Utils.Log import Logger
 
 
 def encode_ComputationData(computation_message: ComputationMessage):
-    return message_pb2.ComputationData(type=computation_message.header.value,
-                                       python_bytes=pickle.dumps(computation_message.data))
+    return message_pb2.ComputationData(
+        type=computation_message.header.value,
+        python_bytes=pickle.dumps((computation_message.data, computation_message.key)))
 
 def decode_ComputationData(computation_data: message_pb2.ComputationData):
-    return ComputationMessage(MessageType(computation_data.type), pickle.loads(computation_data.python_bytes))
+    data, key = pickle.loads(computation_data.python_bytes)
+    return ComputationMessage(MessageType(computation_data.type), data, key)
 
 
 class ComputationRPCClient:
@@ -24,10 +26,10 @@ class ComputationRPCClient:
         self.channel = grpc.insecure_channel(address, options=[('grpc.max_receive_message_length', 10 * 1024 * 1024)])
         self.stub = message_pb2_grpc.MPCServiceStub(self.channel)
 
-    def sendComputationMessage(self, computation_message, client_id):
+    def sendComputationMessage(self, computation_message, client_id: int, time_out: float):
         msg = encode_ComputationData(computation_message)
         msg.client_id = client_id
-        response = self.stub.GetComputationData(msg)
+        response = self.stub.GetComputationData(msg, time_out)
         return decode_ComputationData(response)
 
 
@@ -66,7 +68,7 @@ class Peer(BaseChannel):
         :param ip_dict: 一个dict，指定客户端id和ip地址的对应关系。
         :param time_out:
         """
-        super(Peer, self).__init__(self_id, len(ip_dict), logger)
+        super(Peer, self).__init__(self_id, "", len(ip_dict), logger)
         self.server = ComputationRPCServer(self_port, self_max_workers, self.buffer_msg)
         self.rpc_clients = [ComputationRPCClient(ip_dict[client_num]) for client_num in ip_dict]
         self.ip_dict = ip_dict
@@ -83,18 +85,13 @@ class Peer(BaseChannel):
         :return: True: 表示消息已经被接收；False：表示当前缓存中有消息未被取出；None: 表示未记录的发送者。
         """
         if sender_id in self.ip_dict:
-            msg_received_time = time.time()
-            while self.receive_buffer[sender_id].get(msg.key) is not None:
-                time.sleep(0.01)
-                if time.time() > msg_received_time + self.time_out:
-                    self.logger.log("Timeout while wating for buffer for sender %d. Time elapsed %.3f. Message in the buffer %s"
-                                    % (sender_id, self.time_out, self.receive_buffer[sender_id][msg.key]))
-                    return False
-            self.receive_buffer[sender_id][msg.key] = msg
+            if self.receive_buffer[sender_id].get(msg.key) is None:
+                self.receive_buffer[sender_id][msg.key] = []
+            self.receive_buffer[sender_id][msg.key].append(msg)
             return True
         return None
 
-    def receive(self, sender: int, time_out: float, key=None):
+    def receive(self, sender: int, time_out: float, key=None) -> ComputationMessage:
         """
         :param sender: 发送方
         :param time_out: 接收的延时。如果未设置则采用默认延时。
@@ -103,13 +100,15 @@ class Peer(BaseChannel):
         if not time_out:
             time_out = self.time_out
         start_receive_time = time.time()
-        while self.receive_buffer[sender].get(key) is None:
-            time.sleep(0.01)
+        key_buffer = self.receive_buffer[sender].get(key)
+        while key_buffer is None or len(key_buffer) == 0:
+            time.sleep(0.001)
+            key_buffer = self.receive_buffer[sender].get(key)
             if time.time() - start_receive_time > time_out:
-                self.logger.log("Timeout while receiving from client %d. Time elapsed %.3f" % (sender, time_out))
+                self.logger.log("Timeout while receiving from client %d, key %s. Time elapsed %.3f" % (sender, str(key), time_out))
                 return None
-        msg = self.receive_buffer[sender][key]
-        self.receive_buffer[sender][key] = None
+        msg = key_buffer[0]
+        del key_buffer[0]
         return msg
 
     def send(self, receiver: int, msg: ComputationMessage, time_out: float=None):
@@ -124,9 +123,19 @@ class Peer(BaseChannel):
         resp = MessageType.RECEIVED_ERR
         start_send_time = time.time()
         while resp == MessageType.RECEIVED_ERR:
-            time.sleep(0.01)
             if time.time() - start_send_time > time_out:
                 self.logger.log("Timeout while sending to client %d. Time elapsed %.3f" % (receiver, time_out))
                 return resp
-            resp = self.rpc_clients[receiver].sendComputationMessage(msg, self.client_id)
+            try:
+                resp = self.rpc_clients[receiver].sendComputationMessage(msg, self.client_id, time_out)
+            except:
+                return MessageType.RECEIVED_ERR
         return resp
+
+    def reset(self):
+        """
+        Clear all messages in the buffer
+        :return:
+        """
+        for buffer in self.receive_buffer:
+            buffer.clear()

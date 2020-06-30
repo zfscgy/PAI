@@ -6,7 +6,7 @@ class BaseChannel:
     """
     Channel for communication
     """
-    def __init__(self, self_id: int, n_clients: int, logger: Logger=None):
+    def __init__(self, self_id: int, self_port: str, n_clients: int, logger: Logger=None):
         """
         :param n_clients: Number of clients that will Join this channel
         """
@@ -22,5 +22,11 @@ class BaseChannel:
         """
         raise NotImplementedError()
 
-    def receive(self, sender: int, time_out: float, key=None):
+    def receive(self, sender: int, time_out: float, key=None) -> ComputationMessage:
+        raise NotImplementedError()
+
+    def clean(self) -> bool:
+        raise NotImplementedError()
+
+    def reset(self):
         raise NotImplementedError()

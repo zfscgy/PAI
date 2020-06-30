@@ -50,7 +50,7 @@ class BaseClient:
         :param time_out:
         :return:
         """
-        msg = self.receive_msg(sender, time_out)
+        msg = self.receive_msg(sender, time_out, key)
         if msg is None or (type(header) == MessageType and msg.header != header) or \
                 (type(header) == list and msg.header not in header):
             msg = "Expect message type %s, but get message %s" % (str(header), str(msg))

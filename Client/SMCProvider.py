@@ -47,8 +47,14 @@ class TripletsProvider(BaseClient):
         z = np.matmul(u0 + u1, v0 + v1)
         z0 = z * np.random.uniform(0, 1, z.shape)
         z1 = z - z0
-        self.send_msg(clients[0], ComputationMessage(MessageType.TRIPLE_ARRAY, (clients[1], u0, v0, z0), clients[0]))
-        self.send_msg(clients[1], ComputationMessage(MessageType.TRIPLE_ARRAY, (clients[0], v1, u1, z1), clients[1]))
+        try:
+            self.send_check_msg(clients[0], ComputationMessage(MessageType.TRIPLE_ARRAY, (clients[1], u0, v0, z0), clients[1]))
+        except:
+            self.logger.logE("Sending triplets to client %d failed" % clients[0])
+        try:
+            self.send_check_msg(clients[1], ComputationMessage(MessageType.TRIPLE_ARRAY, (clients[0], v1, u1, z1), clients[0]))
+        except:
+            self.logger.logE("Sending triplets to client %d failed" % clients[1])
 
     def listen_to_client(self, sender_id):
         while self.listening:

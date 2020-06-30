@@ -66,6 +66,7 @@ class MainTFClient(BaseClient):
         self.test_per_batch = config["test_per_batch"]
 
     def __send_config_message(self, config: dict):
+        self.logger.log("Server started, start sending configuration message")
         sending_threads = []
         for data_client in self.data_clients + [self.label_client]:
             sending_threads.append(threading.Thread(
@@ -75,7 +76,7 @@ class MainTFClient(BaseClient):
 
         for thread in sending_threads:
             thread.join()
-
+        self.logger.log("Config message sent to all clients")
         receiving_threads = []
         for data_client in self.data_clients + [self.label_client]:
             receiving_threads.append(threading.Thread(
@@ -127,7 +128,7 @@ class MainTFClient(BaseClient):
         for thread in gathering_threads:
             thread.join()
         if self.error:
-            self.logger.logE("Exception encountered while receiving client outputs")
+            self.logger.logE("Exception encountered  while receiving client outputs")
             return None
 
         output_parts = []
@@ -155,7 +156,7 @@ class MainTFClient(BaseClient):
         if len(self.network.trainable_variables) != 0:
             model_jacobians = self.gradient_tape.jacobian(self.network_out, self.network.trainable_variables)
             model_grad = [tf.reduce_sum(model_jacobian * (tf.reshape(grad_on_output.astype(np.float32),
-                                                                    list(grad_on_output.shape) + [1 for i in range(len(model_jacobian.shape) - 2)]) +\
+                                                                    list(grad_on_output.shape) + [1 for i in range(len(model_jacobian.shape) - 2)]) +
                                                           tf.zeros_like(model_jacobian, dtype=model_jacobian.dtype)),
                                         axis=[0, 1]) for model_jacobian in model_jacobians]
             self.optimizer.apply_gradients(zip(model_grad, self.network.trainable_variables))
@@ -278,6 +279,8 @@ class MainTFClient(BaseClient):
             self.test_mode = False
             n_rounds += 1
             self.logger.log("Train round %d finished" % n_rounds)
+            if n_rounds == config["max_iter"]:
+                train_res = False
             if not train_res:
                 self.logger.logE("Training stopped due to error")
                 self.__broadcast_start(stop=True)

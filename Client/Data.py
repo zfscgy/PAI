@@ -19,8 +19,12 @@ class RandomDataLoader(DataLoader):
 
 
 class CSVDataLoader(DataLoader):
-    def __init__(self, csv_file_path, used_rows, used_columns):
+    def __init__(self, csv_file_path, used_rows=None, used_columns=None):
         csv_data = np.loadtxt(csv_file_path, delimiter=",")
+        if used_rows is None:
+            used_rows = list(range(csv_data.shape[0]))
+        if used_columns is None:
+            used_columns = list(range(csv_data.shape[1]))
         self.data = csv_data[:, used_columns][used_rows]
         self.random_generator = None
 

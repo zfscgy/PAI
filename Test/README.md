@@ -148,9 +148,9 @@ triplets_provider.start_listening()
 >Data client 1:[INFO] [2020-06-24 10:02:06.648144]  Client started, waiting for server config message with time out 100.00
 >Lable client:[INFO] [2020-06-24 10:02:06.648144]  Client started, waiting for server config message with time out 100.00
 >====== Stop the triplet provider, the training should be auto exited =========
->Lable client:[INFO] [2020-06-24 10:02:06.725037]  Received train config message: {'client_dims': {2: 30, 3: 42}, 'out_dim': 1, 'batch_size': 256, 'test_per_batch': 100, 'test_batch_size': None, 'learning_rate': 0.01, 'sync_info': {'seed': 8964}}
->Data client 0:[INFO] [2020-06-24 10:02:06.725037]  Received train conifg message: {'client_dims': {2: 30, 3: 42}, 'out_dim': 1, 'batch_size': 256, 'test_per_batch': 100, 'test_batch_size': None, 'learning_rate': 0.01, 'sync_info': {'seed': 8964}}
->Data client 1:[INFO] [2020-06-24 10:02:06.729391]  Received train conifg message: {'client_dims': {2: 30, 3: 42}, 'out_dim': 1, 'batch_size': 256, 'test_per_batch': 100, 'test_batch_size': None, 'learning_rate': 0.01, 'sync_info': {'seed': 8964}}
+>Lable client:[INFO] [2020-06-24 10:02:06.725037]  Received train config message: {'client_dims': {2: 30, 3: 42}, 'out_dim': 1, 'batch_size': 256, 'test_per_batch': 100, 'test_batch_size': None, 'learning_rate': 0.01, 'sync_info': {'seed': 8888}}
+>Data client 0:[INFO] [2020-06-24 10:02:06.725037]  Received train conifg message: {'client_dims': {2: 30, 3: 42}, 'out_dim': 1, 'batch_size': 256, 'test_per_batch': 100, 'test_batch_size': None, 'learning_rate': 0.01, 'sync_info': {'seed': 8888}}
+>Data client 1:[INFO] [2020-06-24 10:02:06.729391]  Received train conifg message: {'client_dims': {2: 30, 3: 42}, 'out_dim': 1, 'batch_size': 256, 'test_per_batch': 100, 'test_batch_size': None, 'learning_rate': 0.01, 'sync_info': {'seed': 8888}}
 >Lable client:[INFO] [2020-06-24 10:02:06.760185]  Test Round:
 >Data client 0:[INFO] [2020-06-24 10:02:06.760185]  Test Round:
 >Data client 1:[INFO] [2020-06-24 10:02:06.762226]  Test Round:

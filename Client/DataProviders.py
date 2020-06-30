@@ -76,7 +76,7 @@ class DataClient(BaseClient):
                                                                        (self.batch_data.shape[0], self.other_paras[other_id].shape[0]))))
 
         def get_triples():
-            msg = self.receive_check_msg(self.triplets_id, MessageType.TRIPLE_ARRAY, other_id)
+            msg = self.receive_check_msg(self.triplets_id, MessageType.TRIPLE_ARRAY, key=other_id)
             self.current_triplets[msg.data[0]] = msg.data[1:]
 
         def share_data():
@@ -370,6 +370,10 @@ class LabelClient(BaseClient):
         else:
             self.metric_func = metric_func
 
+        self.n_rounds = 0
+        self.metrics_record = []
+
+
         self.test_mode = False
         self.error = False
 
@@ -383,8 +387,10 @@ class LabelClient(BaseClient):
     def __compute_pred_grad(self):
         preds = self.receive_check_msg(self.server_id, MessageType.PRED_LABEL).data
         loss = self.loss_func.forward(self.batch_labels, preds)
-
-        self.logger.log("Current batch loss: %.4f, metric value: %.4f" % (loss, self.metric_func(self.batch_labels, preds)))
+        metric = self.metric_func(self.batch_labels, preds)
+        if self.test_mode:
+            self.metrics_record.append([self.n_rounds, metric])
+        self.logger.log("Current batch loss: %.4f, metric value: %.4f" % (loss, metric))
         grad = self.loss_func.backward()
         self.send_check_msg(self.server_id, ComputationMessage(MessageType.PRED_GRAD, (grad, loss)))
 
@@ -449,11 +455,11 @@ class LabelClient(BaseClient):
 
         self.logger.log("Received train config message: %s" % msg.data)
 
-        n_rounds = 0
+        self.n_rounds = 0
         while True:
             train_res = self.__train_one_round()
-            n_rounds += 1
-            self.logger.log("Train round %d finished" % n_rounds)
+            self.n_rounds += 1
+            self.logger.log("Train round %d finished" % self.n_rounds)
             try:
                 self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_ROUND_OVER, train_res))
             except:
