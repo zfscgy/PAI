@@ -2,13 +2,12 @@ import numpy as np
 import threading
 import pathlib
 import pickle
-import traceback
+import time
 from Client.Client import BaseClient, ClientException
 from Communication.Message import MessageType, ComputationMessage
 from Communication.Channel import BaseChannel
 from Client.Data import DataLoader
 from Client.Learning.Losses import LossFunc, MSELoss
-from Client.Learning.Metrics import onehot_accuracy
 from Utils.Log import Logger
 
 
@@ -371,6 +370,7 @@ class LabelClient(BaseClient):
             self.metric_func = metric_func
 
         self.n_rounds = 0
+        self.start_time = 0
         self.metrics_record = []
 
 
@@ -389,8 +389,8 @@ class LabelClient(BaseClient):
         loss = self.loss_func.forward(self.batch_labels, preds)
         metric = self.metric_func(self.batch_labels, preds)
         if self.test_mode:
-            self.metrics_record.append([self.n_rounds, metric])
-        self.logger.log("Current batch loss: %.4f, metric value: %.4f" % (loss, metric))
+            self.metrics_record.append([time.time() - self.start_time, self.n_rounds] + metric)
+        self.logger.log("Current batch loss: {}, metric value: {}".format(loss, metric))
         grad = self.loss_func.backward()
         self.send_check_msg(self.server_id, ComputationMessage(MessageType.PRED_GRAD, (grad, loss)))
 
@@ -431,7 +431,7 @@ class LabelClient(BaseClient):
         self.label_loader.sync_data(config["sync_info"])
         self.test_label_loader.sync_data(config["sync_info"])
 
-    def start_train(self, wait_for_server:float=100):
+    def start_train(self, wait_for_server: float=100):
         """
         :param wait_for_server:
         :return:
@@ -445,6 +445,7 @@ class LabelClient(BaseClient):
             msg = self.receive_check_msg(self.server_id, MessageType.TRAIN_CONFIG, time_out=wait_for_server)
             self.set_config(msg.data)
             self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_READY, None))
+            self.start_time = time.time()
         except ClientException:
             self.logger.logE("Train not started")
             return

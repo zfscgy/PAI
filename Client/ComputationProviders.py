@@ -280,7 +280,9 @@ class MainTFClient(BaseClient):
             n_rounds += 1
             self.logger.log("Train round %d finished" % n_rounds)
             if n_rounds == config["max_iter"]:
-                train_res = False
+                self.logger.log("Max iter reached, train stop")
+                self.__broadcast_start(stop=True)
+                break
             if not train_res:
                 self.logger.logE("Training stopped due to error")
                 self.__broadcast_start(stop=True)

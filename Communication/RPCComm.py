@@ -102,7 +102,7 @@ class Peer(BaseChannel):
         start_receive_time = time.time()
         key_buffer = self.receive_buffer[sender].get(key)
         while key_buffer is None or len(key_buffer) == 0:
-            time.sleep(0.001)
+            time.sleep(0.002)
             key_buffer = self.receive_buffer[sender].get(key)
             if time.time() - start_receive_time > time_out:
                 self.logger.log("Timeout while receiving from client %d, key %s. Time elapsed %.3f" % (sender, str(key), time_out))

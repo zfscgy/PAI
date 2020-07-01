@@ -11,10 +11,11 @@ class TripletsProvider(BaseClient):
     """
     A client for generate beaver triples. It can listen to other clients
     """
-    def __init__(self, channel: BaseChannel, logger:Logger=None):
+    def __init__(self, channel: BaseChannel, data_clients: list, logger:Logger=None):
         super(TripletsProvider, self).__init__(channel, logger)
         self.triplets_id = self.client_id
         self.triplet_proposals = dict()
+        self.data_clients  = data_clients
         self.listening_thread = [None for _ in range(channel.n_clients)]
         self.listening = False
 
@@ -65,7 +66,7 @@ class TripletsProvider(BaseClient):
         Start the listening thread
         """
         self.listening = True
-        for i in range(self.channel.n_clients):
+        for i in self.data_clients:
             self.listening_thread[i] = threading.Thread(target=self.listen_to_client, args=(i,))
             self.listening_thread[i].start()
 
@@ -74,5 +75,5 @@ class TripletsProvider(BaseClient):
         Stop the listening thread
         """
         self.listening = False
-        for i in range(self.channel.n_clients):
+        for i in self.data_clients:
             self.listening_thread[i].join()

@@ -1,8 +1,7 @@
 import threading
 import time
 import numpy as np
-from sklearn.metrics import roc_auc_score
-
+from Client.Learning.Metrics import AUC_KS
 
 from Communication.RPCComm import Peer
 from Client.DataProviders import DataClient, LabelClient
@@ -86,7 +85,7 @@ def test_2pc_mnist():
     channel3 = Peer(3, "[::]:19004", 10, ip_dict, 13, logger=Logger(prefix="Channel3:"))
     channel4 = Peer(4, "[::]:19005", 10, ip_dict, 13, logger=Logger(prefix="Channel4:"))
     main_client = MainTFClient(channel0, [2, 3], 4, logger=Logger(prefix="Main client:"))
-    triplets_provider = TripletsProvider(channel1, logger=Logger(prefix="Triplet provider:"))
+    triplets_provider = TripletsProvider(channel1, [2, 3], logger=Logger(prefix="Triplet provider:"))
     data_client0 = DataClient(channel2,
                               CSVDataLoader("Test/TestDataset/mnist.csv", list(range(50000)), list(range(300))),
                               CSVDataLoader("Test/TestDataset/mnist.csv", list(range(50000, 55000)), list(range(300))),
@@ -148,6 +147,10 @@ def test_2pc_mnist():
     print("====== MPC NN Test finished =============")
 
 def test_credit_data_2pc():
+    # Disable GPU since server do not have any computation other than sigmoid
+    import tensorflow as tf
+    tf.config.experimental.set_visible_devices([], 'GPU')
+
     print("\n======== Test mpc NN protocol with MNIST Dataset ============\n")
     ip_dict = {
         0: "127.0.0.1:19001",
@@ -163,7 +166,7 @@ def test_credit_data_2pc():
     channel4 = Peer(4, "[::]:19005", 10, ip_dict, 13, logger=Logger(prefix="Channel4:"))
 
     main_client = MainTFClient(channel0, [2, 3], 4, logger=Logger(prefix="Main client:"))
-    triplets_provider = TripletsProvider(channel1, logger=Logger(prefix="Triplet provider:"))
+    triplets_provider = TripletsProvider(channel1, [2, 3], logger=Logger(prefix="Triplet provider:"))
     data_client0 = DataClient(channel2,
                               CSVDataLoader("Test/TestDataset/credit_default.csv", list(range(40000)), list(range(30))),
                               CSVDataLoader("Test/TestDataset/credit_default.csv", list(range(40000, 50000)), list(range(30))),
@@ -176,22 +179,20 @@ def test_credit_data_2pc():
                               server_id=0, triplets_id=1, other_data_clients=[2],
                               logger=Logger(prefix="Data client 1:"))
 
-    def auc(y_true, y_pred):
-        return roc_auc_score(y_true[:, 0], y_pred[:, 0])
     label_client = LabelClient(channel4,
                                CSVDataLoader("Test/TestDataset/credit_default.csv", list(range(40000)), list(range(72, 73))),
                                CSVDataLoader("Test/TestDataset/credit_default.csv", list(range(40000, 50000)),
                                              list(range(72, 73))),
-                               server_id=0, metric_func=auc, logger=Logger(prefix="Lable client:"))
+                               server_id=0, metric_func=AUC_KS, logger=Logger(prefix="Lable client:"))
     triplets_provider.start_listening()
     config = {
         "client_dims": {2: 30, 3: 42},
         "out_dim": 1,
         "batch_size": 256,
-        "test_per_batch": 101,
+        "test_per_batch": 1001,
         "test_batch_size": None,
         "learning_rate": 0.01,
-        "max_iter": 102,
+        "max_iter": 100103,
         "sync_info": {
             "seed": 8964
         }
@@ -218,7 +219,7 @@ def test_credit_data_2pc():
     data_client1_th.join()
     label_client_th.join()
     print("====== MPC NN Test finished =============")
-    np.savetxt("mpc_record.csv", label_client.metrics_record, delimiter=",")
+    np.savetxt("mpc_record.csv", np.array(label_client.metrics_record), delimiter=",")
     triplets_provider.stop_listening()
 
 

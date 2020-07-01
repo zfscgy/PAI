@@ -1,6 +1,6 @@
+import time
 import tensorflow as tf
-from sklearn.metrics import roc_auc_score
-
+from Client.Learning.Metrics import AUC_KS
 from Client.Data import CSVDataLoader
 k = tf.keras
 
@@ -11,18 +11,19 @@ def test_credit_logistic(dims):
     logistic_model = k.Sequential(k.layers.Dense(1, k.activations.sigmoid))
     logistic_model.compile(k.optimizers.SGD(0.1), k.losses.mean_squared_error)
 
-    aucs = []
+    metrics = []
+    start_time = time.time()
     for i in range(100000):
         if i % 1000 == 0:
             xys = test_data.get_batch(None)
             pred_ys = logistic_model.predict_on_batch(xys[:, :-1])
-            auc = roc_auc_score(xys[:, -1:], pred_ys)
-            print("Train round %d, auc %.4f" % (i, auc))
-            aucs.append([i, auc])
+            metric = AUC_KS(xys[:, -1:], pred_ys)
+            print("Train round {}, metric {}".format(i, metric))
+            metrics.append([i, time.time() - start_time] + metric)
         else:
             xys = train_data.get_batch(32)
             loss = logistic_model.train_on_batch(xys[:, :-1], xys[:, -1:])
-    return aucs
+    return metrics
 
 if __name__ == "__main__":
     import numpy as np
