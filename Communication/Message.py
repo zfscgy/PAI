@@ -8,8 +8,6 @@ class MessageType(Enum):
     # 比如：一个客户端的数据shape = (batch_size, dim)，另一个客户端拥有对应的参数 (dim, out_dim)
     # 该方法可以计算出这两个矩阵的乘积，而客户端的自己的数据不需要发送出去。
 
-
-
     SET_TRIPLET = 11
     """
     Send a beaver triple request to triple provider
@@ -68,6 +66,10 @@ class MessageType(Enum):
     CLIENT_OUT_GRAD = 30
     CLIENT_PARA_UPDATE = 31
     CLIENT_ROUND_OVER = 32
+
+    ALIGN_AES_KEY = 50
+    ALIGN_ENC_IDS = 51
+    ALIGN_FINAL_IDS = 52
 
     # Those is for message responses
     RECEIVED_ERR = 98

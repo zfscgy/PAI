@@ -151,7 +151,7 @@ def test_credit_data_2pc():
     import tensorflow as tf
     tf.config.experimental.set_visible_devices([], 'GPU')
 
-    print("\n======== Test mpc NN protocol with MNIST Dataset ============\n")
+    print("\n======== Test mpc NN protocol with Credit Default Dataset ============\n")
     ip_dict = {
         0: "127.0.0.1:19001",
         1: "127.0.0.1:19002",

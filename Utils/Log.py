@@ -20,3 +20,6 @@ class Logger:
         if 2 >= self.level:
             self.logger.write(self.prefix + "[ERROR] [" + str(datetime.datetime.today()) + "]  " + error + "\n")
             self.logger.write(traceback.format_exc() + "\n")
+
+    def __del__(self):
+        self.logger.close()

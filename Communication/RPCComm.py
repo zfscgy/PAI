@@ -47,7 +47,7 @@ class ComputationServicer(message_pb2_grpc.MPCServiceServicer):
 class ComputationRPCServer:
     def __init__(self, port, max_workers, msg_handler):
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers),
-                                  options=[('grpc.max_receive_message_length', 10 * 1024 * 1024)])
+                                  options=[('grpc.max_receive_message_length', 50 * 1024 * 1024)])
         message_pb2_grpc.add_MPCServiceServicer_to_server(ComputationServicer(msg_handler), self.server)
         self.server.add_insecure_port(port)
 
@@ -120,16 +120,17 @@ class Peer(BaseChannel):
         """
         if not time_out:
             time_out = self.time_out
-        resp = MessageType.RECEIVED_ERR
+        resp = ComputationMessage(MessageType.RECEIVED_ERR, None)
         start_send_time = time.time()
-        while resp == MessageType.RECEIVED_ERR:
+        while resp.header == MessageType.RECEIVED_ERR:
             if time.time() - start_send_time > time_out:
                 self.logger.log("Timeout while sending to client %d. Time elapsed %.3f" % (receiver, time_out))
                 return resp
             try:
                 resp = self.rpc_clients[receiver].sendComputationMessage(msg, self.client_id, time_out)
             except:
-                return MessageType.RECEIVED_ERR
+                self.logger.logE("Error while sending to client %d" % receiver)
+                return resp
         return resp
 
     def reset(self):
