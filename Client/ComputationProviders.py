@@ -156,13 +156,13 @@ class MainTFClient(BaseClient):
         if len(self.network.trainable_variables) != 0:
             model_jacobians = self.gradient_tape.jacobian(self.network_out, self.network.trainable_variables)
             model_grad = [tf.reduce_sum(model_jacobian * (tf.reshape(grad_on_output.astype(np.float32),
-                                                                    list(grad_on_output.shape) + [1 for i in range(len(model_jacobian.shape) - 2)]) +
+                                                                     list(grad_on_output.shape) + [1 for i in range(len(model_jacobian.shape) - 2)]) +
                                                           tf.zeros_like(model_jacobian, dtype=model_jacobian.dtype)),
                                         axis=[0, 1]) for model_jacobian in model_jacobians]
             self.optimizer.apply_gradients(zip(model_grad, self.network.trainable_variables))
         input_jacobian = self.gradient_tape.jacobian(self.network_out, self.input_tensor)
         input_grad = tf.reduce_sum(input_jacobian * (tf.reshape(grad_on_output.astype(np.float32),
-                                                               list(grad_on_output.shape) + [1 for i in range(len(input_jacobian.shape) - 2)]) +
+                                                                list(grad_on_output.shape) + [1 for i in range(len(input_jacobian.shape) - 2)]) +
                                    tf.zeros_like(self.input_tensor, dtype=self.input_tensor.dtype)),
                                    axis=[0, 1]).numpy()
         return input_grad
@@ -282,8 +282,8 @@ class MainTFClient(BaseClient):
             if n_rounds == config["max_iter"]:
                 self.logger.log("Max iter reached, train stop")
                 self.__broadcast_start(stop=True)
-                break
+                return True
             if not train_res:
                 self.logger.logE("Training stopped due to error")
                 self.__broadcast_start(stop=True)
-                break
+                return False

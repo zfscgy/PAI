@@ -141,8 +141,12 @@ class PreprocessClient(BaseClient):
 
         aligned_data = self.data.loc[selected_ids]
         aligned_data.to_csv(self.filepath[:-4] + "_aligned.csv", header=None, index=True)
-        aligned_data.to_csv(self.filepath[:-4] + "_aligned_noindex.csv", header=None, index=False)
-
+        test_size = int(len(selected_ids) / 5)
+        train_data = aligned_data[:-test_size]
+        test_data = aligned_data.iloc[-test_size:]
+        train_data.to_csv(self.filepath[:-4] + "_train.csv", header=None, index=False)
+        test_data.to_csv(self.filepath[:-4] + "_test.csv", header=None, index=False)
+        return True
 
 class MainPreprocessor(BaseClient):
     def __init__(self, channel: BaseChannel, data_clients: list, logger: Logger=None):

@@ -241,6 +241,7 @@ class DataClient(BaseClient):
 
         except:
             self.logger.logE("Error encountered while receiving server's start message")
+            self.error = True
             return False
 
         """
@@ -268,6 +269,7 @@ class DataClient(BaseClient):
                                                    (self.own_out, self.shared_out_AB, self.shared_out_BA)))
         except:
             self.logger.logE("Error encountered while sending output shares to server")
+            self.error = True
             return False
         """
         If not in the test_mode, interactively calculate the gradients w.r.t. to data client's share of parameters
@@ -277,7 +279,9 @@ class DataClient(BaseClient):
                 self.__parameter_update()
             except:
                 self.logger.logE("Error encountered while updateing parameters")
+                self.error = True
                 return False
+
             if self.error:
                 self.logger.logE("Error encountered while updateing parameters")
                 return False
@@ -323,13 +327,10 @@ class DataClient(BaseClient):
 
             self.para = self.other_paras[self.client_id]
             self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_READY, None))
-        except ClientException:
-            self.logger.logE("Train not started")
-            return
-        except Exception as e:
-            self.logger.logE("Python Exception encountered, stop.")
-            self.logger.logE("Train not started")
-            return
+        except Exception:
+            self.logger.logE("Train not started due to error while receiving config message and sending client-ready")
+            self.error = True
+            return False
 
         self.logger.log("Received train conifg message: %s" % msg.data)
 
@@ -345,11 +346,14 @@ class DataClient(BaseClient):
                 self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_ROUND_OVER, train_res))
             except:
                 self.logger.logE("Error encountered while sending round over message to server")
-                break
+                self.error = True
+                return False
             if not train_res:
-                self.logger.logE("Error encountered while training one round. Stop.")
-                break
-
+                if self.error:
+                    self.logger.logE("Error encountered while training one round. Stop.")
+                    return False
+                else:
+                    return True
 
 class LabelClient(BaseClient):
     def __init__(self, channel: BaseChannel, label_loader: DataLoader, test_label_loader: DataLoader,
@@ -365,7 +369,7 @@ class LabelClient(BaseClient):
         else:
             self.loss_func = loss_func
         if metric_func is None:
-            self.metric_func = onehot_accuracy
+            self.metric_func = loss_func
         else:
             self.metric_func = metric_func
 
@@ -408,6 +412,7 @@ class LabelClient(BaseClient):
                     self.test_mode = True
         except:
             self.logger.logE("Error encountered while receiving server's start message")
+            self.error = True
             return False
         try:
             if not self.test_mode:
@@ -416,6 +421,7 @@ class LabelClient(BaseClient):
                 self.batch_labels = self.test_label_loader.get_batch(self.test_batch_size)
         except:
             self.logger.logE("Error encountered while loading batch labels")
+            self.error = True
             return False
 
         try:
@@ -448,11 +454,11 @@ class LabelClient(BaseClient):
             self.start_time = time.time()
         except ClientException:
             self.logger.logE("Train not started")
-            return
+            return False
         except Exception as e:
             self.logger.logE("Python Exception encountered, stop\n")
             self.logger.logE("Train not started")
-            return
+            return False
 
         self.logger.log("Received train config message: %s" % msg.data)
 
@@ -465,7 +471,10 @@ class LabelClient(BaseClient):
                 self.send_check_msg(self.server_id, ComputationMessage(MessageType.CLIENT_ROUND_OVER, train_res))
             except:
                 self.logger.logE("Error encountered while sending round over message to server")
-                break
+                return False
             if not train_res:
-                self.logger.logE("Error encountered while training one round. Stop.")
-                break
+                if self.error:
+                    self.logger.logE("Error encountered while training one round. Stop.")
+                    return False
+                else:
+                    return True

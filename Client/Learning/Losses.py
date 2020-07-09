@@ -35,3 +35,12 @@ class MSELoss(LossFunc):
         self.ys = None
         self.pred_ys = None
         return grad
+
+
+loss_dict = {
+    "mse": MSELoss
+}
+
+def get_loss(loss_name: str):
+    loss_name = loss_name.lower()
+    return loss_dict[loss_name]
