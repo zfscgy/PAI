@@ -35,13 +35,9 @@ class DataClient(BaseClient):
         self.prediction_mode =False
         self.error = False
 
-        """
-        Lock for matrix multiplication triplet
-        Note: since we only have one buffer to 
-        """
-        self.triplet_lock = threading.Lock()
-
         # 变量储存器，用于Secret Sharing矩阵乘法
+        self.n_rounds = 0
+
         self.current_triplets = [None for _ in range(channel.n_clients)]
 
         self.shared_own_mat = [None for _ in range(channel.n_clients)]
@@ -119,12 +115,10 @@ class DataClient(BaseClient):
 
         # Calculate X_own * Theta_other
         def calc_AB():
-            # Atomic operation to acquire triplet
-            self.triplet_lock.acquire()
+
             set_triplet_AB()
             get_triples()
-            self.triplet_lock.release()
-            # release lock
+
             share_data()
             get_other_share()
             recover_own_value()
@@ -135,12 +129,10 @@ class DataClient(BaseClient):
 
         # Calculate Theta_own * X_other
         def calc_BA():
-            # Atomic operation to acquire triplet
-            self.triplet_lock.acquire()
+
             set_triplet_BA()
             get_triples()
-            self.triplet_lock.release()
-            # release lock
+
             share_para()
             get_other_share()
             recover_own_value()
@@ -334,11 +326,11 @@ class DataClient(BaseClient):
 
         self.logger.log("Received train conifg message: %s" % msg.data)
 
-        n_rounds = 0
+        self.n_rounds = 0
         while True:
             train_res = self.__train_one_round()
-            n_rounds += 1
-            self.logger.log("Train round %d finished" % n_rounds)
+            self.n_rounds += 1
+            self.logger.log("Train round %d finished" % self.n_rounds)
             """
             After one train round over, send CLIENT_ROUND_OVER message to server
             """

@@ -6,7 +6,22 @@ message ComputationData {
   bytes python_bytes = 3;
 }
 
+message TaskQuery {
+  string query_string = 1;
+}
+
+message TaskResponse {
+  int32 client_id = 1;
+  int32 status = 2;
+  bytes python_bytes = 3;
+}
+
 service MPCService
 {
   rpc GetComputationData(ComputationData) returns(ComputationData) {}
+}
+
+service QueryMPCTask
+{
+  rpc QueryTask(TaskQuery) returns(TaskResponse) {}
 }

@@ -1,7 +1,7 @@
 import requests
 
 task_request = {
-    "task-name": "task-name",
+    "task_name": "test-task",
     "model-name": "nn",
     "train-config": {
         "max_iter": 1234,
@@ -9,21 +9,21 @@ task_request = {
         "test_per_rounds": 100,
     },
     "clients": {
-        "main": {
+        "main_client": {
             "addr": "127.0.0.1",
-            "http_port": 8380,
-            "computation_port": 8381
+            "http_port": 8377,
+            "computation_port": 8378
         },
-        "crypto-producer": {
+        "crypto_producer": {
             "addr": "127.0.0.1",
             "http_port": 8390,
             "computation_port": 8391
         },
-        "data-clients": [
+        "data_clients": [
             {
                 "addr": "127.0.0.1",
-                "http_port": 8080,
-                "computation_port": 8081,
+                "http_port": 8084,
+                "computation_port": 8085,
                 "data-file": "data_file.csv",
                 "dim": 30
             },
@@ -35,11 +35,11 @@ task_request = {
                 "dim": 40
             }
         ],
-        "label-client": {
+        "label_client": {
             "addr": "127.0.0.1",
             "http_port": 8884,
             "computation_port": 8885,
-            "label-file": "label-file.csv",
+            "data-file": "label-file.csv",
             "loss": "mse",
             "metrics": "auc_ks"
         }

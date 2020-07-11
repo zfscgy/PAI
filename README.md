@@ -74,7 +74,7 @@
 
 基本的运算流程如下：
 
-| Stage         | Data-Client                                    | Main Client(Server)                    | Label-Client send        |
+| Stage         | data_client                                    | Main Client(Server)                    | label_client send        |
 | ------------- | ---------------------------------------------- | -------------------------------------- | ------------------------ |
 | Preparing     |                                                | TRAIN_CONFIG **→ All**                 |                          |
 |               | CLIENT_READY **→Server**                       |                                        | **Server←** CLIENT_READY |

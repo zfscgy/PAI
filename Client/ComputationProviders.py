@@ -11,10 +11,11 @@ k = tf.keras
 
 
 class MainTFClient(BaseClient):
-    def __init__(self, channel: BaseChannel, data_clients: list, label_client, logger: Logger = None):
+    def __init__(self, channel: BaseChannel, data_clients: list, label_client, train_config, logger: Logger = None):
         super(MainTFClient, self).__init__(channel, logger)
         self.data_clients = data_clients
         self.label_client = label_client
+        self.train_config = train_config
         self.error = False
         #
         self.data_client_outs = dict()
@@ -27,6 +28,8 @@ class MainTFClient(BaseClient):
 
         self.test_per_batch = None
         self.test_mode = False
+
+        self.n_rounds = 0
 
     def build_network(self, network: k.Model, optimizer: k.optimizers, in_dim):
         self.network = network
@@ -64,6 +67,7 @@ class MainTFClient(BaseClient):
 
     def __set_config_message(self, config: dict):
         self.test_per_batch = config["test_per_batch"]
+        self.build_mlp_network(config["out_dim"], config["layers"])
 
     def __send_config_message(self, config: dict):
         self.logger.log("Server started, start sending configuration message")
@@ -268,18 +272,19 @@ class MainTFClient(BaseClient):
 
         return True
 
-    def start_train(self, config):
+    def start_train(self):
+        config = self.train_config
         self.__set_config_message(config)
         self.__send_config_message(config)
-        n_rounds = 0
+        self.n_rounds = 0
         while True:
-            if n_rounds % self.test_per_batch == 0:
+            if self.n_rounds % self.test_per_batch == 0:
                 self.test_mode = True
             train_res = self.__train_one_batch()
             self.test_mode = False
-            n_rounds += 1
-            self.logger.log("Train round %d finished" % n_rounds)
-            if n_rounds == config["max_iter"]:
+            self.n_rounds += 1
+            self.logger.log("Train round %d finished" % self.n_rounds)
+            if self.n_rounds == config["max_iter"]:
                 self.logger.log("Max iter reached, train stop")
                 self.__broadcast_start(stop=True)
                 return True

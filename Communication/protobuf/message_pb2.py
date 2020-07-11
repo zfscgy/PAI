@@ -18,7 +18,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=b'\n\rmessage.proto\"H\n\x0f\x43omputationData\x12\x11\n\tclient_id\x18\x01 \x01(\x05\x12\x0c\n\x04type\x18\x02 \x01(\x05\x12\x14\n\x0cpython_bytes\x18\x03 \x01(\x0c\x32H\n\nMPCService\x12:\n\x12GetComputationData\x12\x10.ComputationData\x1a\x10.ComputationData\"\x00\x62\x06proto3'
+  serialized_pb=b'\n\rmessage.proto\"H\n\x0f\x43omputationData\x12\x11\n\tclient_id\x18\x01 \x01(\x05\x12\x0c\n\x04type\x18\x02 \x01(\x05\x12\x14\n\x0cpython_bytes\x18\x03 \x01(\x0c\"!\n\tTaskQuery\x12\x14\n\x0cquery_string\x18\x01 \x01(\t\"G\n\x0cTaskResponse\x12\x11\n\tclient_id\x18\x01 \x01(\x05\x12\x0e\n\x06status\x18\x02 \x01(\x05\x12\x14\n\x0cpython_bytes\x18\x03 \x01(\x0c\x32H\n\nMPCService\x12:\n\x12GetComputationData\x12\x10.ComputationData\x1a\x10.ComputationData\"\x00\x32\x38\n\x0cQueryMPCTask\x12(\n\tQueryTask\x12\n.TaskQuery\x1a\r.TaskResponse\"\x00\x62\x06proto3'
 )
 
 
@@ -68,7 +68,85 @@ _COMPUTATIONDATA = _descriptor.Descriptor(
   serialized_end=89,
 )
 
+
+_TASKQUERY = _descriptor.Descriptor(
+  name='TaskQuery',
+  full_name='TaskQuery',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='query_string', full_name='TaskQuery.query_string', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=91,
+  serialized_end=124,
+)
+
+
+_TASKRESPONSE = _descriptor.Descriptor(
+  name='TaskResponse',
+  full_name='TaskResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='client_id', full_name='TaskResponse.client_id', index=0,
+      number=1, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='status', full_name='TaskResponse.status', index=1,
+      number=2, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='python_bytes', full_name='TaskResponse.python_bytes', index=2,
+      number=3, type=12, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"",
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=126,
+  serialized_end=197,
+)
+
 DESCRIPTOR.message_types_by_name['ComputationData'] = _COMPUTATIONDATA
+DESCRIPTOR.message_types_by_name['TaskQuery'] = _TASKQUERY
+DESCRIPTOR.message_types_by_name['TaskResponse'] = _TASKRESPONSE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 ComputationData = _reflection.GeneratedProtocolMessageType('ComputationData', (_message.Message,), {
@@ -78,6 +156,20 @@ ComputationData = _reflection.GeneratedProtocolMessageType('ComputationData', (_
   })
 _sym_db.RegisterMessage(ComputationData)
 
+TaskQuery = _reflection.GeneratedProtocolMessageType('TaskQuery', (_message.Message,), {
+  'DESCRIPTOR' : _TASKQUERY,
+  '__module__' : 'message_pb2'
+  # @@protoc_insertion_point(class_scope:TaskQuery)
+  })
+_sym_db.RegisterMessage(TaskQuery)
+
+TaskResponse = _reflection.GeneratedProtocolMessageType('TaskResponse', (_message.Message,), {
+  'DESCRIPTOR' : _TASKRESPONSE,
+  '__module__' : 'message_pb2'
+  # @@protoc_insertion_point(class_scope:TaskResponse)
+  })
+_sym_db.RegisterMessage(TaskResponse)
+
 
 
 _MPCSERVICE = _descriptor.ServiceDescriptor(
@@ -86,8 +178,8 @@ _MPCSERVICE = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=91,
-  serialized_end=163,
+  serialized_start=199,
+  serialized_end=271,
   methods=[
   _descriptor.MethodDescriptor(
     name='GetComputationData',
@@ -102,5 +194,29 @@ _MPCSERVICE = _descriptor.ServiceDescriptor(
 _sym_db.RegisterServiceDescriptor(_MPCSERVICE)
 
 DESCRIPTOR.services_by_name['MPCService'] = _MPCSERVICE
+
+
+_QUERYMPCTASK = _descriptor.ServiceDescriptor(
+  name='QueryMPCTask',
+  full_name='QueryMPCTask',
+  file=DESCRIPTOR,
+  index=1,
+  serialized_options=None,
+  serialized_start=273,
+  serialized_end=329,
+  methods=[
+  _descriptor.MethodDescriptor(
+    name='QueryTask',
+    full_name='QueryMPCTask.QueryTask',
+    index=0,
+    containing_service=None,
+    input_type=_TASKQUERY,
+    output_type=_TASKRESPONSE,
+    serialized_options=None,
+  ),
+])
+_sym_db.RegisterServiceDescriptor(_QUERYMPCTASK)
+
+DESCRIPTOR.services_by_name['QueryMPCTask'] = _QUERYMPCTASK
 
 # @@protoc_insertion_point(module_scope)

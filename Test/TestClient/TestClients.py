@@ -164,8 +164,20 @@ def test_credit_data_2pc():
     channel2 = Peer(2, "[::]:19003", 10, ip_dict, 13, logger=Logger(prefix="Channel2:"))
     channel3 = Peer(3, "[::]:19004", 10, ip_dict, 13, logger=Logger(prefix="Channel3:"))
     channel4 = Peer(4, "[::]:19005", 10, ip_dict, 13, logger=Logger(prefix="Channel4:"))
-
-    main_client = MainTFClient(channel0, [2, 3], 4, logger=Logger(prefix="Main client:"))
+    train_config = {
+        "client_dims": {2: 30, 3: 42},
+        "out_dim": 1,
+        "layers": [],
+        "batch_size": 256,
+        "test_per_batch": 1001,
+        "test_batch_size": None,
+        "learning_rate": 0.01,
+        "max_iter": 100103,
+        "sync_info": {
+            "seed": 8964
+        }
+    }
+    main_client = MainTFClient(channel0, [2, 3], 4, train_config, logger=Logger(prefix="Main client:"))
     triplets_provider = TripletsProvider(channel1, [2, 3], logger=Logger(prefix="Triplet provider:"))
     data_client0 = DataClient(channel2,
                               CSVDataLoader("Test/TestDataset/credit_default.csv", list(range(40000)), list(range(30))),
@@ -185,24 +197,11 @@ def test_credit_data_2pc():
                                              list(range(72, 73))),
                                server_id=0, metric_func=AUC_KS, logger=Logger(prefix="Lable client:"))
     triplets_provider.start_listening()
-    config = {
-        "client_dims": {2: 30, 3: 42},
-        "out_dim": 1,
-        "batch_size": 256,
-        "test_per_batch": 1001,
-        "test_batch_size": None,
-        "learning_rate": 0.01,
-        "max_iter": 100103,
-        "sync_info": {
-            "seed": 8964
-        }
-    }
-    main_client.build_mlp_network(1, [])
+
 
 
     main_client_start_th = threading.Thread(
         target=main_client.start_train,
-        args=(config,)
     )
     data_client0_th = threading.Thread(target=data_client0.start_train)
     data_client1_th = threading.Thread(target=data_client1.start_train)

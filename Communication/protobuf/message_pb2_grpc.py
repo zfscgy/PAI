@@ -62,3 +62,63 @@ class MPCService(object):
             message__pb2.ComputationData.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)
+
+
+class QueryMPCTaskStub(object):
+    """Missing associated documentation comment in .proto file"""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.QueryTask = channel.unary_unary(
+                '/QueryMPCTask/QueryTask',
+                request_serializer=message__pb2.TaskQuery.SerializeToString,
+                response_deserializer=message__pb2.TaskResponse.FromString,
+                )
+
+
+class QueryMPCTaskServicer(object):
+    """Missing associated documentation comment in .proto file"""
+
+    def QueryTask(self, request, context):
+        """Missing associated documentation comment in .proto file"""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_QueryMPCTaskServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'QueryTask': grpc.unary_unary_rpc_method_handler(
+                    servicer.QueryTask,
+                    request_deserializer=message__pb2.TaskQuery.FromString,
+                    response_serializer=message__pb2.TaskResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'QueryMPCTask', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+
+
+ # This class is part of an EXPERIMENTAL API.
+class QueryMPCTask(object):
+    """Missing associated documentation comment in .proto file"""
+
+    @staticmethod
+    def QueryTask(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/QueryMPCTask/QueryTask',
+            message__pb2.TaskQuery.SerializeToString,
+            message__pb2.TaskResponse.FromString,
+            options, channel_credentials,
+            call_credentials, compression, wait_for_ready, timeout, metadata)
