@@ -43,4 +43,4 @@ loss_dict = {
 
 def get_loss(loss_name: str):
     loss_name = loss_name.lower()
-    return loss_dict[loss_name]
+    return loss_dict.get(loss_name)

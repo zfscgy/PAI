@@ -1,12 +1,12 @@
 import time
 import tensorflow as tf
 from Client.Learning.Metrics import AUC_KS
-from Client.Data import CSVDataLoader
+from Client.Data.DataLoader import CSVDataLoader
 k = tf.keras
 
 def test_credit_logistic(dims):
     train_data = CSVDataLoader("Test/TestDataset/credit_default.csv", list(range(40000)), dims)
-    train_data.sync_data({"seed": 8964})
+    train_data.set_random_seed({"seed": 8964})
     test_data = CSVDataLoader("Test/TestDataset/credit_default.csv", list(range(40000, 50000)), dims)
     logistic_model = k.Sequential(k.layers.Dense(1, k.activations.sigmoid))
     logistic_model.compile(k.optimizers.SGD(0.1), k.losses.mean_squared_error)

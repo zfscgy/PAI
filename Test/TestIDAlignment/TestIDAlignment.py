@@ -1,8 +1,7 @@
 import threading
-import time
 
 from Communication.RPCComm import Peer
-from Client.ProprocessClient import PreprocessClient, MainPreprocessor
+from Client.Preprocess.PreprocessClient import PreprocessClient, MainPreprocessor
 from Utils.Log import Logger
 from Crypto import Random
 from Crypto.Cipher import AES

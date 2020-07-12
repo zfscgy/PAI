@@ -24,14 +24,14 @@ task_request = {
                 "addr": "127.0.0.1",
                 "http_port": 8084,
                 "computation_port": 8085,
-                "data-file": "data_file.csv",
+                "data-file": "Splitted_Indexed_Data/credit_default_data1.csv",
                 "dim": 30
             },
             {
                 "addr": "127.0.0.1",
                 "http_port": 8082,
                 "computation_port": 8083,
-                "data-file": "data_file.csv",
+                "data-file": "Splitted_Indexed_Data/credit_default_data2.csv",
                 "dim": 40
             }
         ],
@@ -39,7 +39,7 @@ task_request = {
             "addr": "127.0.0.1",
             "http_port": 8884,
             "computation_port": 8885,
-            "data-file": "label-file.csv",
+            "data-file": "Splitted_Indexed_Data/credit_default_data3.csv",
             "loss": "mse",
             "metrics": "auc_ks"
         }

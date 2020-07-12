@@ -112,7 +112,7 @@ config = {
 由于我们认为，主客户端的具体网络结构与训练配置信息并不一样，因此这里没有整合到`config`里面去，而是额外的一个方法。
 
 ```python
-main_client.build_mlp_network(1, [])
+main_client.__build_mlp_network(1, [])
 ```
 
 这里表示构建一个输入为1，不包含其它层的MLP网络，即仅仅对输入做了一个sigmoid。因为当前场景是逻辑回归。

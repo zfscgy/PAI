@@ -1,9 +1,5 @@
-import numpy as np
-import threading
-import traceback
 from Communication.Message import MessageType, ComputationMessage
 from Communication.Channel import BaseChannel
-from Client.Data import DataLoader
 from Utils.Log import Logger
 
 
