@@ -1,92 +1,13 @@
+# PAI - Private AI: 
 
+## Practical Private AI based on Secure Multiparty Computing
 
-# 基本模块
+PAI是一个基于MPC（安全多方计算）的隐私AI库，实现了从样本对齐到隐私模型训练的一站式解决方案。PAI通过定制化的训练协议，所有参与方代码可控，安全高效地进行联合建模。
 
-## Channel
+### PAI Client - 底层MPC算法库
 
-一个用来通信的**抽象类**。
+目前已经支持适用于多个参与方的 **纵向** 加密样本对齐、线性回归、逻辑回归和全连接神经网络算法。GBDT算法正在开发中。
 
-**`__init__`**：
+### PAI Server - MPC任务调度和查询服务器
 
-* `self_id: int`：用来标识自己的id
-* `n_clients: int`：表示总共有几个参与通信的节点
-* `logger: Logger`：日志记录工具
-
-**`send`**
-
-* `receiver: int`：接收方的id
-
-* `msg: ComputationMessage`：要发送的信息。必须是ComputationMessage类型的。
-
-* `time_out: float`：超过该时间就放弃发送。注：只需要把消息放入接收方的缓存区即成功，并非要对应的`client`执行`receive`。
-
-* **Return**：推荐在错误时返回None，反之返回收到的回应（ComputationMessage，确定消息被成功收到）。
-
-  注意：该方法不开启一个新的线程，是阻塞的。
-
-**`receive`**
-
-* `sender: int`：发送方的id。
-
-* `time_out`：超过该时间就停止接收。
-
-* **Return**：推荐在错误时返回None，反之返回收到的消息（ComputationMessage，确定消息被成功收到）。
-
-  注意：该方法不开启新线程，是阻塞性的。
-
-这个类的方法都是阻塞性的，且有一个发送必须有一个接收，否则缓存区会被占据；缓存区只能存放一个消息。因此所有的通信协议必须严格制定。
-
-*这个类是一个抽象类，方法并没有进行实现。*
-
-## BaseClient
-
-表示基本的客户端类，在`Channel`上封装了一层。可以调用不同的`Channel`的具体实现。
-
-**`__init__`**
-
-* `channel: Channel`：
-
-**`send_msg`**：直接调用了`Channel`的对应方法。
-
-**`receive_msg`**：直接调用了`Channel`的对应方法。
-
-**`send_check_msg`**
-
-* `receiver: int`：接收方
-* `msg: ComputationMessage`：要发送的信息。
-
-**`receive_check_msg`**
-
-* `sender: int `：发送方
-* `header: MessageType`：指定要接收的`MessageType`，也可以是`MessageType`的列表
-* `time_out: float`
-* **Return**：如果未能接收到指定类型的消息，会报错。返回接收到的消息。
-
-
-
-## MPC计算神经网络
-
-在MPC计算神经网络的过程中，需要有3个参与方：
-
-* DataClient: 拥有数据
-* LabelClient: 拥有标签
-* MainClient: 拥有一部分模型
-
-基本的运算流程如下：
-
-| Stage         | data_client                                    | Main Client(Server)                    | label_client send        |
-| ------------- | ---------------------------------------------- | -------------------------------------- | ------------------------ |
-| Preparing     |                                                | TRAIN_CONFIG **→ All**                 |                          |
-|               | CLIENT_READY **→Server**                       |                                        | **Server←** CLIENT_READY |
-| Training loop |                                                | NEXT_TRAIN_ROUND **→ All**             |                          |
-|               | *doing hidden layer computations....*          |                                        |                          |
-|               | MUL_OUT_SHARE **→Server**                      |                                        |                          |
-|               |                                                | *calculating server outputs*           |                          |
-|               |                                                | PRED_LABEL <br />**→ Label client**    |                          |
-|               |                                                |                                        | *calculating gradients*  |
-|               |                                                |                                        | **Server←** PRED_GRAD    |
-|               |                                                | *calculating server gradients*         |                          |
-|               |                                                | CLIENT_OUT_GRAD<br />**Data clients←** |                          |
-|               | *exchanging gradients with other data clients* |                                        |                          |
-|               | CLIENT_ROUND_OVER **→Server**                  |                                        |                          |
-
+主节点运行Flask服务器，只需要一个Json POST请求，就可以创建MPC任务并且让各个节点开始执行任务。随时通过Http查询任务进展情况和测试集验证结果等信息。
