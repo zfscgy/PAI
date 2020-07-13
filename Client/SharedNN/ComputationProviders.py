@@ -11,12 +11,27 @@ from Utils.Log import Logger
 
 
 class MainClient(MPCC.MainClient):
-    def __init__(self, channel: BaseChannel, logger: Logger, 
-                 mpc_params: MPCC.MPCClientParas, mpc_mode: MPCC.MPCClientMode, train_config):
-        super(MainClient, self).__init__(channel, logger, mpc_params, mpc_mode, train_config)
-
+    def __init__(self, channel: BaseChannel, logger: Logger,
+                 mpc_params: MPCC.MPCClientParas, mpc_mode: MPCC.MPCClientMode, main_config):
+        """
+        :param channel:
+        :param logger:
+        :param mpc_params:
+        :param mpc_mode:
+        :param main_config: Should be:
+            {
+                "client_dims": {2: 20, 4: 30} or {"2": 20, "4": 30},
+                "out_dim: 1,
+                "layers": [],
+                "batch_size": 64,
+                "test_per_batch": 101,
+                "test_batch_size": None,
+                "learning_rate": 0.1,
+                "max_iter": 1002,
+            }
+        """
+        super(MainClient, self).__init__(channel, logger, mpc_params, mpc_mode, main_config)
         self.error = False
-        
         #
         self.data_client_outs = dict()
         #
@@ -57,11 +72,14 @@ class MainClient(MPCC.MainClient):
             self.logger.logE("Error encountered while receiving client ready message fom client %d" % client_id)
             self.error = True
 
-    def __set_config_message(self, config: dict):
-        self.test_per_batch = config["test_per_batch"]
-        self.__build_mlp_network(config["out_dim"], config["layers"])
+    def __set_config_message(self):
+        self.test_per_batch = self.config["test_per_batch"]
+        self.__build_mlp_network(self.config["out_dim"], self.config["layers"])
 
-    def __send_config_message(self, config: dict):
+
+    def __send_config_message(self):
+        config = self.config.copy()
+        config["random_seed"] = np.random.randint(0, 1000000)
         self.logger.log("Server started, start sending configuration message")
         sending_threads = []
         for data_client in self.feature_client_ids + [self.label_client_id]:
@@ -265,8 +283,17 @@ class MainClient(MPCC.MainClient):
         return True
 
     def start_train(self):
-        self.__set_config_message(self.config)
-        self.__send_config_message(self.config)
+        try:
+            self.__set_config_message()
+        except:
+            self.logger.logE("Setting config failed. Train stop.")
+            return False
+
+        self.__send_config_message()
+        if self.error:
+            self.logger.logE("Broadcastring config message to clients failed. Train stop.")
+            return False
+
         self.n_rounds = 0
         while True:
             if self.n_rounds % self.test_per_batch == 0:

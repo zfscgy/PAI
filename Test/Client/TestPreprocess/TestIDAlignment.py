@@ -9,7 +9,7 @@ from Crypto.Cipher import AES
 iv = Random.new().read(AES.block_size)
 
 def test_align_data():
-    print("\n======================== Test aligning a Dataset ========================\n")
+    print("\n======================== Test aligning a TestDataset ========================\n")
     ip_dict = {
         0: "127.0.0.1:19001",
         1: "127.0.0.1:19002",

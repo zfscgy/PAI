@@ -1,5 +1,5 @@
 .idea
 **/__pycache__
 Test/Log
-Test/TestTasks/MainServer/
-Test/TestTasks/TaskRoot/
+Test/TestTasksRoot/MainServerRoot/
+Test/TestTasksRoot/ClientTaskRoot/

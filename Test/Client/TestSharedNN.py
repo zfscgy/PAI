@@ -7,7 +7,7 @@ from Client.Learning.Losses import MSELoss
 from Communication.RPCComm import Peer
 from Client.MPCClient import MPCClientParas, MPCClientMode
 from Client.SharedNN.DataProviders import FeatureClient, LabelClient
-from Client.MPCProviders.SMCProvider import TripletsProvider
+from Client.MPCProviders.TripletProducer import TripletProducer
 from Client.SharedNN.ComputationProviders import MainClient
 from Utils.Log import Logger
 from Client.Data.DataLoader import CSVDataLoader
@@ -18,7 +18,7 @@ def test_credit_data_2pc():
     import tensorflow as tf
     tf.config.experimental.set_visible_devices([], 'GPU')
 
-    print("\n======== Test mpc NN protocol with Credit Default Dataset ============\n")
+    print("\n======== Test mpc NN protocol with Credit Default TestDataset ============\n")
     ip_dict = {
         0: "127.0.0.1:19001",
         1: "127.0.0.1:19002",
@@ -40,11 +40,10 @@ def test_credit_data_2pc():
         "test_batch_size": None,
         "learning_rate": 0.1,
         "max_iter": 1002,
-        "random_seed": 8964
     }
     mpc_paras = MPCClientParas([2, 3], 4, 0, 1)
     main_client = MainClient(channel0, Logger(prefix="Main client:"), mpc_paras, MPCClientMode.Train, train_config)
-    triplets_provider = TripletsProvider(channel1, Logger(prefix="Triplet provider:"), mpc_paras)
+    triplets_provider = TripletProducer(channel1, Logger(prefix="Triplet provider:"), mpc_paras)
     data_client0 = FeatureClient(channel2, Logger(prefix="Data client 0:"), mpc_paras, MPCClientMode.Train,
                                  CSVDataLoader("Test/TestDataset/Data/credit_default.csv", list(range(40000)), list(range(30))),
                                  CSVDataLoader("Test/TestDataset/Data/credit_default.csv", list(range(40000, 50000)), list(range(30))))
@@ -57,8 +56,6 @@ def test_credit_data_2pc():
                                CSVDataLoader("Test/TestDataset/Data/credit_default.csv", list(range(40000, 50000)),
                                              list(range(72, 73))), MSELoss(), AUC_KS)
     triplets_provider.start_listening()
-
-
 
     main_client_start_th = threading.Thread(
         target=main_client.start_train,

@@ -5,13 +5,11 @@ import os
 import pickle
 import json
 import re
+
+from Client.Client import BaseClient
 from Client.MPCClient import MPCClientParas
-from Client.Data.DataLoader import CSVDataLoader
-from Client.Preprocess.PreprocessClient import PreprocessClient, MainPreprocessor
-from Client.MPCProviders.SMCProvider import TripletsProvider
 from Client.SharedNN.DataProviders import FeatureClient, LabelClient
-from Client.Learning.Metrics import get_metric
-from Client.Learning.Losses import get_loss
+from Server.TaskControl import TaskConfig
 from Utils.Log import Logger
 import Server.TaskControl.TaskConfig as Config
 
@@ -33,6 +31,13 @@ class MPCRoles:
     LabelProvider = "label_provider"
     MainProvider = "main_provider"
     CryptoProvider = "crypto_provider"
+
+
+class MPCModels:
+    models = {"shared_nn", "shared_lr"}
+    SharedNN = "shared_nn"
+    SharedLR = "shared_lr"
+
 
 class TaskStage(enum.Enum):
     Creating = 0
@@ -57,12 +62,19 @@ def set_channel_class(channel_class: type):
     Channel = channel_class
 
 
+def str_dict_to_int(str_dict: dict):
+    int_dict = dict()
+    for key_str in str_dict:
+        value = str_dict[key_str]
+        int_dict[int(key_str)] = value
+    return int_dict
+
 
 class MPCTask:
     def __init__(self, role: str, task_name: str,
-                 client_id: int, mpc_paras: MPCClientParas,
+                 client_id: int, mpc_paras,
                  ip_dict: dict, listen_port: int,
-                 log_level: int, configs: dict
+                 configs: dict
 ):
         """
         :param role: one of "data_client", "label_client", "main_client"
@@ -79,26 +91,20 @@ class MPCTask:
         :param ip_dict:
         :param listen_port:
 
-        :param config
-        :param log_level:
+        :param configs
         """
         if role not in MPCRoles.roles:
-            self.logger.logE("Not ")
+            self.logger.logE("Not a valid mpc role: {}".format(role))
             self.stage = TaskStage.Error
         self.role = role
 
         self.current_task_path = Config.TaskRootPath + task_name + "-%d" % client_id + "/"
         self.stage = TaskStage.Creating
-        self.log_level = log_level
-        self.logger = Logger(open(self.current_task_path + "task_log.txt", "w+"), level=log_level)
+        self.log_level = TaskConfig.TaskLogLevel
+        self.logger = Logger(open(self.current_task_path + "task_log.txt", "w+"), level=self.log_level)
 
         # Since ip_dict maybe serialized from json. The key of ip_dict has to be int.
-        new_ip_dict = {}
-        for id_str in ip_dict:
-            addr = ip_dict[id_str]
-            new_ip_dict[int(id_str)] = addr
-        ip_dict = new_ip_dict
-        self.ip_dict = ip_dict
+        self.ip_dict = str_dict_to_int(ip_dict)
 
         if isinstance(mpc_paras, dict):
             try:
@@ -123,7 +129,7 @@ class MPCTask:
 
         self.task_start_time = time.time()
 
-
+        self.task_manage_client = BaseClient(self.channel, None)
         # Make Log and Data directories under task directory
         try:
             os.mkdir(Config.TaskRootPath + task_name + "-%d" % client_id + "/log")
@@ -141,7 +147,7 @@ class MPCTask:
         # Create Communication channel
         try:
             self.channel = Channel(client_id, "0.0.0.0:" + str(listen_port), len(ip_dict), ip_dict, time_out=30,
-                                   logger=Logger(open(self.current_task_path + "log/channel_log.txt", "w+"), level=log_level))
+                                   logger=Logger(open(self.current_task_path + "log/channel_log.txt", "w+"), level=self.log_level))
         except:
             self.logger.logE("Cannot create channel with port {}, ip_dict {}".format(listen_port, ip_dict))
 
@@ -151,121 +157,11 @@ class MPCTask:
             self.logger.logW("Cannot attach query service since compuation server is not grpc server.")
         self.stage = TaskStage.Created
 
-
-    def __load_data(self):
-        try:
-            self.train_data_loader = CSVDataLoader(self.preprocess_client.train_data_path, None, None)
-            self.test_data_loader = CSVDataLoader(self.preprocess_client.test_data_path, None, None)
-            if self.test_data_loader.data.shape[1] != self.train_data_loader:
-                self.logger.logE("Test data shape {} not match train data shape {}".
-                                 format(self.test_data_loader.data.shape, self.train_data_loader.data.shape))
-                raise TaskException("Train data shape and test data shape must match.")
-        except:
-            raise TaskException("Cannot create data loader, check data_config.")
-
-
-    def start_preprocess(self, join=False):
-        self.stage = TaskStage.Proprecessing
-        if self.role is "data_client" or self.role is "label_client":
-            self.preprocess_client = \
-                PreprocessClient(self.channel, Config.DataRootPath + self.data_config["data_path"],
-                                 self.current_task_path + "Data/",
-                                 self.main_client, self.other_data_clients,
-                                 Logger(open(self.current_task_path + "log/preprocess_log.txt", "w+"),
-                                        level=self.log_config["log_level"]))
-
-            def align_thread():
-                if self.preprocess_client.start_align():
-                    self.stage = TaskStage.LoadingData
-                else:
-                    self.stage = TaskStage.Error
-        elif self.role is "main_client":
-            self.preprocess_client = \
-                MainPreprocessor(self.channel, self.data_clients,
-                                 Logger(open(self.current_task_path + "log/preprocess_log.txt", "w+"),
-                                        level=self.log_config["log_level"]))
-            def align_thread():
-                if self.preprocess_client.start_align():
-                    self.stage = TaskStage.LoadingData
-                else:
-                    self.stage = TaskStage.Error
-
-        elif self.role is "crypto_producer":
-            self.train_client = TripletsProvider(self.channel, self.data_clients,
-                                                 Logger(open(self.current_task_path + "log/triplets_log.txt", "w+"),
-                                                        level=self.log_config["log_level"]))
-            def align_thread():
-                self.train_client.start_listening()
-
-        else:
-            # It should never be reached
-            return False
-
-        thread = threading.Thread(target=align_thread)
-        thread.start()
-        if join:
-            thread.join()
-
-
-    def start_train(self, join=False):
-        if self.role is "data_client" or self.role is "label_client":
-            try:
-                self.__load_data()
-            except:
-                self.logger.logE("Load data failed. Stop training")
-                return False
-            if self.role is "data_client":
-                self.train_client = FeatureClient(self.channel, self.train_data_loader, self.test_data_loader,
-                                                  self.main_client, self.crypto_provider, self.other_data_clients,
-                                                  Logger(open(self.current_task_path + "log/train_log.txt", "w+"),
-                                                      level=self.log_config["log_level"]))
-            else:
-                self.train_client = LabelClient(self.channel, self.train_data_loader, self.test_data_loader,
-                                                self.main_client,
-                                                get_loss(self.learn_config["loss"]),
-                                                get_metric(self.learn_config["metrics"]),
-                                                Logger(open(self.current_task_path + "log/train_log.txt", "w+"),
-                                                       level=self.log_config["log_level"]))
-            def train_thread():
-                if self.train_client.start_train():
-                    self.stage = TaskStage.Finished
-                else:
-                    self.stage = TaskStage.Error
-            threading.Thread(target=train_thread).start()
-
-        elif self.role is "main_client":
-            from Client.SharedNN.ComputationProviders import MainClient
-            self.train_client = MainClient(self.channel, self.data_clients, self.label_client, self.train_config,
-                                           Logger(open(self.current_task_path + "log/train_log.txt", "w+")))
-            time.sleep(70)  # Waiting for clients to load data
-            def train_thread():
-                if self.train_client.start_train():
-                    self.stage = TaskStage.Finished
-                else:
-                    self.stage = TaskStage.Error
-        elif self.role is "crypto_producer":
-            return True
-        else:
-            return False
-
-        thread = threading.Thread(target=train_thread)
-        thread.start()
-        if join:
-            thread.join()
-
-
-    def start_all(self, join=False):
-        def task_thread():
-            self.start_preprocess(join=True)
-            self.start_train(join=True)
-        thread = threading.Thread(target=task_thread)
-        thread.start()
-        if join:
-            thread.join()
+    def start(self):
+        raise NotImplementedError()
 
 
 def create_task_pyscript(**kwargs):
-
     os.mkdir(Config.TaskRootPath + kwargs["task_name"] + "-%d" % (kwargs["client_id"]))
     task_script_string = \
         "import sys, os\n" +\
@@ -285,31 +181,10 @@ class QueryMPCTaskServicer(message_pb2_grpc.QueryMPCTaskServicer):
         self.task = task
         self.query_dict = {
             "QueryStage": self._query_stage,
-            "StartTask": self._start_task,
-            "QueryNRounds": self._query_n_rounds,
-            "QueryStats": self._query_stats
         }
-
-    def _start_task(self):
-        if self.task.stage is not TaskStage.Created:
-            return "The task is already started before", None
-        self.task.start_all()
-        return "ok", None
 
     def _query_stage(self):
         return self.task.stage.name
-
-    def _query_n_rounds(self):
-        if self.task.role == "crypto_producer":
-            # This code shall never reached
-            return "crypto_producer do not have rounds", None
-        return "ok", self.task.train_client.n_rounds
-
-    def _query_stats(self):
-        if type(self.task.train_client) is not LabelClient:
-            return "Only label client have stats", None
-        assert isinstance(self.task.train_client, LabelClient)
-        return "ok", self.task.train_client.metrics_record[-5:]
 
     def QueryTask(self, request: message_pb2.TaskQuery, context):
         def encode(status: str, obj=None):
@@ -318,6 +193,8 @@ class QueryMPCTaskServicer(message_pb2_grpc.QueryMPCTaskServicer):
             return encode("Query url not exist")
         status, resp = self.query_dict[request.query_string]()
         return encode(status, resp)
+
+
 
 
 def add_query_service_to_computation_grpc_server(task: MPCTask):

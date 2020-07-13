@@ -22,7 +22,6 @@ class FeatureClient(MPCC.DataClient):
         self.other_feature_client_ids.remove(self.client_id)
 
 
-
         self.batch_size = None
         self.n_rounds = 0
 
@@ -275,7 +274,7 @@ class FeatureClient(MPCC.DataClient):
 
         return True
 
-    def set_config(self, config:dict):
+    def __set_config(self, config: dict):
         self.configs = config
         client_dims = config["client_dims"]
         out_dim = config["out_dim"]
@@ -298,19 +297,22 @@ class FeatureClient(MPCC.DataClient):
         np.save(pathlib.Path(directory).joinpath("own_param.npy"), self.para)
         pickle.dump(self.other_paras, pathlib.Path(directory).joinpath("other_paras.pkl"))
 
-    def start_train(self, wait_for_server: float=100):
+    def start_train(self, configs:dict=None):
         """
         :param wait_for_server:
         :return:
         """
+        if configs is None:
+            configs = dict()
+
         """
         Receive config message from server, then initialize some parameters
         After this, send CLIENT_READY message to server
         """
-        self.logger.log("Client started, waiting for server config message with time out %.2f" % wait_for_server)
+        self.logger.log("Client started, waiting for server config message with time out %.2f" % configs.get('wait_for_server'))
         try:
-            msg = self.receive_check_msg(self.main_client_id, MessageType.TRAIN_CONFIG, time_out=wait_for_server)
-            self.set_config(msg.data)
+            msg = self.receive_check_msg(self.main_client_id, MessageType.TRAIN_CONFIG, time_out=configs.get('wait_for_server'))
+            self.__set_config(msg.data)
 
             self.para = self.other_paras[self.client_id]
             self.send_check_msg(self.main_client_id, ComputationMessage(MessageType.CLIENT_READY, None))

@@ -13,10 +13,27 @@ from Utils.Log import Logger
 class DataProviderTask(MPCTask):
     def __init__(self, role: str, task_name: str,
                  client_id: int, mpc_paras: MPCClientParas,
-                 ip_dict: dict, listen_port: int,
-                 log_level: int, configs: dict):
+                 ip_dict: dict, listen_port: int, configs: dict):
+        """
+        :param role:
+        :param task_name:
+        :param client_id:
+        :param mpc_paras:
+        :param ip_dict:
+        :param listen_port:
+        :param log_level:
+        :param configs:
+                Should be like
+                {
+                    "loss_func": xxx,
+                    "metrics": xxx,
+                    "train_configs": {
+                        "wait_for_server": 100
+                    }
+                {
+        """
         super(DataProviderTask, self).__init__(role, task_name, client_id, mpc_paras,
-                                               ip_dict, listen_port, log_level, configs)
+                                               ip_dict, listen_port, configs)
         if role not in [MPCRoles.FeatureProvider, MPCRoles.LabelProvider]:
             self.logger.logE("Role is not data_provider, task stop")
             self.stage = TaskStage.Error
@@ -48,6 +65,10 @@ class DataProviderTask(MPCTask):
                 self.stage = TaskStage.Error
                 return
 
+            if self.configs.get("train_configs") is None:
+                self.configs["train_configs"] = dict()
+
+
         self.preprocess_client = PreprocessClient(
             self.channel, Logger(open(self.task_log_path + "channel_log.txt", "w+"), self.log_level),
             mpc_paras, self.configs["file_path"], self.task_data_path)
@@ -70,6 +91,7 @@ class DataProviderTask(MPCTask):
             return False
 
         self.logger.log("Loading data finished. Start training")
+        self.stage = TaskStage.Training
         if self.role == MPCRoles.FeatureProvider:
             self.train_client = FeatureClient(
                 self.channel, Logger(open(self.task_log_path + 'train_log.txt', "w+"), level=self.log_level),
@@ -79,9 +101,18 @@ class DataProviderTask(MPCTask):
                 self.channel, Logger(open(self.task_log_path + 'train_log.txt', "w+"), level=self.log_level),
                 self.mpc_paras, MPCClientMode.Train, train_data_loader, test_data_loader)
         try:
-            self.train_client.send_check_msg(self.mpc_paras.main_client_id,
+            self.task_manage_client.send_check_msg(self.mpc_paras.main_client_id,
                                              ComputationMessage(MessageType.NULL, "load-data-done"))
         except:
             self.logger.logE("Sending load-data-done message to main client failed")
             self.stage = TaskStage.Error
             return False
+        if self.train_client.start_train(configs=self.configs["train_configs"]):
+            self.logger.log("Train finished.")
+            self.stage = TaskStage.Finished
+            # Should add some methods to store data
+            return True
+        else:
+            self.logger.logE("Train failed.")
+            self.stage = TaskStage.Error
+        return False
