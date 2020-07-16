@@ -36,17 +36,17 @@ class BaseClient:
         """
         return self.channel.send(receiver, msg, time_out)
 
-    def receive_msg(self, sender: int, time_out=None, key=None):
-        return self.channel.receive(sender, time_out, key)
+    def receive_msg(self, sender: int, time_out=None, key=None, **kwargs):
+        return self.channel.receive(sender, time_out, key, **kwargs)
 
-    def receive_check_msg(self, sender: int, header, time_out=None, key=None):
+    def receive_check_msg(self, sender: int, header, time_out=None, key=None, **kwargs):
         """
         :param sender:
         :param header: can be MessageType or list of MessageType
         :param time_out:
         :return:
         """
-        msg = self.receive_msg(sender, time_out, key)
+        msg = self.receive_msg(sender, time_out, key, **kwargs)
         if msg is None or (type(header) == MessageType and msg.header != header) or \
                 (type(header) == list and msg.header not in header):
             msg = "Expect message type %s, but get message %s" % (str(header), str(msg))

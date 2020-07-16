@@ -1,5 +1,5 @@
 import numpy as np
-
+import pandas as pd
 
 class DataLoader:
     def set_random_seed(self, random_seed: int):
@@ -11,7 +11,7 @@ class DataLoader:
 
 class CSVDataLoader(DataLoader):
     def __init__(self, csv_file_path, used_rows=None, used_columns=None):
-        csv_data = np.loadtxt(csv_file_path, delimiter=",")
+        csv_data = pd.read_csv(csv_file_path, header=None).values
         if used_rows is None:
             used_rows = list(range(csv_data.shape[0]))
         if used_columns is None:

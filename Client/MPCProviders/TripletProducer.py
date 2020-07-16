@@ -19,7 +19,7 @@ class TripletProducer(MPCClient):
         self.listening = False
 
     def __listen_to(self, sender: int):
-        msg = self.receive_msg(sender, time_out=99999)
+        msg = self.receive_msg(sender, time_out=120)
         if msg is not None:
             if msg.header == MessageType.SET_TRIPLET:
                 operand_sender, target, shape_sender, shape_target = msg.data
@@ -34,6 +34,12 @@ class TripletProducer(MPCClient):
                     self.triplet_proposals[(sender, target)] = (operand_sender, shape_sender, shape_target)
             else:
                 self.logger.logW("Expect SET_TRIPLET message, but received %s from %d" % (msg.header, sender))
+
+    def __receive_stop_msg(self):
+        # Check if there's main client's training stop message every 15 seconds.
+        self.receive_check_msg(self.main_client_id, MessageType.TRAINING_STOP, key="stop", time_out=1000000, interval=15)
+        self.logger.log("Received stop messgae from main_client. Stop listening. ")
+        self.stop_listening()
 
     def __generate_and_send_triplets(self, first_operand: int, clients, shapes):
         # 判断哪一个是乘数，哪一个是被乘数
@@ -69,6 +75,7 @@ class TripletProducer(MPCClient):
             self.listening_thread[i] = threading.Thread(target=self.__listen_to_client, args=(i,),
                                                         name="Triplet-Listening-to-%d" % i)
             self.listening_thread[i].start()
+        self.__receive_stop_msg()
 
     def stop_listening(self):
         """

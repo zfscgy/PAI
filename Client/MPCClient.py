@@ -17,8 +17,8 @@ class MPCClientException(Exception):
 
 
 class MPCClientParas:
-    def __init__(self, feature_clients_ids: list, label_client_id: int, main_client_id: int, crypto_producer_id: int):
-        self.feature_client_ids = feature_clients_ids
+    def __init__(self, feature_client_ids: list, label_client_id: int, main_client_id: int, crypto_producer_id: int):
+        self.feature_client_ids = feature_client_ids
         self.label_client_id = label_client_id
         self.main_client_id = main_client_id
         self.crypto_producer_id = crypto_producer_id

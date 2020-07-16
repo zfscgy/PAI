@@ -39,7 +39,7 @@ def test_credit_data_2pc():
         "test_per_batch": 101,
         "test_batch_size": None,
         "learning_rate": 0.1,
-        "max_iter": 1002,
+        "max_iter": 102,
     }
     mpc_paras = MPCClientParas([2, 3], 4, 0, 1)
     main_client = MainClient(channel0, Logger(prefix="Main client:"), mpc_paras, MPCClientMode.Train, train_config)
@@ -55,15 +55,14 @@ def test_credit_data_2pc():
                                CSVDataLoader("Test/TestDataset/Data/credit_default.csv", list(range(40000)), list(range(72, 73))),
                                CSVDataLoader("Test/TestDataset/Data/credit_default.csv", list(range(40000, 50000)),
                                              list(range(72, 73))), MSELoss(), AUC_KS)
-    triplets_provider.start_listening()
-
     main_client_start_th = threading.Thread(
         target=main_client.start_train,
     )
     data_client0_th = threading.Thread(target=data_client0.start_train)
     data_client1_th = threading.Thread(target=data_client1.start_train)
     label_client_th = threading.Thread(target=label_client.start_train)
-    triplets_provider.start_listening()
+    triplets_provider_th = threading.Thread(target=triplets_provider.start_listening)
+    triplets_provider_th.start()
     data_client0_th.start()
     data_client1_th.start()
     label_client_th.start()

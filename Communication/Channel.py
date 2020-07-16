@@ -22,7 +22,7 @@ class BaseChannel:
         """
         raise NotImplementedError()
 
-    def receive(self, sender: int, time_out: float, key=None) -> ComputationMessage:
+    def receive(self, sender: int, time_out: float, key=None, **kwargs) -> ComputationMessage:
         raise NotImplementedError()
 
     def clean(self) -> bool:

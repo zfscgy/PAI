@@ -305,6 +305,8 @@ class FeatureClient(MPCC.DataClient):
         if configs is None:
             configs = dict()
 
+        if configs.get("wait_for_server") is None:
+            configs["wait_for_server"] = 120
         """
         Receive config message from server, then initialize some parameters
         After this, send CLIENT_READY message to server
@@ -329,21 +331,24 @@ class FeatureClient(MPCC.DataClient):
             train_res = self.__train_one_round()
             self.n_rounds += 1
             self.logger.log("Train round %d finished" % self.n_rounds)
-            """
-            After one train round over, send CLIENT_ROUND_OVER message to server
-            """
-            try:
-                self.send_check_msg(self.main_client_id, ComputationMessage(MessageType.CLIENT_ROUND_OVER, train_res))
-            except:
-                self.logger.logE("Error encountered while sending round over message to server")
-                self.error = True
-                return False
+
             if not train_res:
                 if self.error:
                     self.logger.logE("Error encountered while training one round. Stop.")
                     return False
                 else:
                     return True
+            """
+            After one train round over, send CLIENT_ROUND_OVER message to server
+            """
+
+
+            try:
+                self.send_check_msg(self.main_client_id, ComputationMessage(MessageType.CLIENT_ROUND_OVER, train_res))
+            except:
+                self.logger.logE("Error encountered while sending round over message to server")
+                self.error = True
+                return False
 
 
 class LabelClient(MPCC.DataClient):
@@ -424,7 +429,8 @@ class LabelClient(MPCC.DataClient):
         self.train_data_loader.set_random_seed(config["random_seed"])
         self.test_data_loader.set_random_seed(config["random_seed"])
 
-    def start_train(self, wait_for_server: float=100):
+    def start_train(self):
+        wait_for_server = 120
         """
         :param wait_for_server:
         :return:
@@ -449,16 +455,17 @@ class LabelClient(MPCC.DataClient):
         self.n_rounds = 0
         while True:
             train_res = self.__train_one_round()
-            self.n_rounds += 1
             self.logger.log("Train round %d finished" % self.n_rounds)
-            try:
-                self.send_check_msg(self.main_client_id, ComputationMessage(MessageType.CLIENT_ROUND_OVER, train_res))
-            except:
-                self.logger.logE("Error encountered while sending round over message to server")
-                return False
             if not train_res:
                 if self.error:
                     self.logger.logE("Error encountered while training one round. Stop.")
                     return False
                 else:
                     return True
+
+            self.n_rounds += 1
+            try:
+                self.send_check_msg(self.main_client_id, ComputationMessage(MessageType.CLIENT_ROUND_OVER, train_res))
+            except:
+                self.logger.logE("Error encountered while sending round over message to server")
+                return False

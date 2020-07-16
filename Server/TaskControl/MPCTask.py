@@ -1,15 +1,10 @@
 import time
 import enum
-import threading
 import os
 import pickle
-import json
-import re
 
 from Client.Client import BaseClient
 from Client.MPCClient import MPCClientParas
-from Client.SharedNN.DataProviders import FeatureClient, LabelClient
-from Server.TaskControl import TaskConfig
 from Utils.Log import Logger
 import Server.TaskControl.TaskConfig as Config
 
@@ -43,10 +38,9 @@ class TaskStage(enum.Enum):
     Creating = 0
     Created = 1
     Proprecessing = 2
-    LoadingData = 3
-    Training = 4
-    Finished = 5
-    Error = 6
+    Training = 3
+    Finished = 4
+    Error = 5
 
 from Communication.Channel import BaseChannel
 from Communication.RPCComm import Peer as GRPCChannel
@@ -71,7 +65,7 @@ def str_dict_to_int(str_dict: dict):
 
 
 class MPCTask:
-    def __init__(self, role: str, task_name: str,
+    def __init__(self, role: str, task_name: str, model_name: str,
                  client_id: int, mpc_paras,
                  ip_dict: dict, listen_port: int,
                  configs: dict
@@ -93,22 +87,49 @@ class MPCTask:
 
         :param configs
         """
+        self.current_task_path = Config.TaskRootPath + task_name + "-%d" % client_id + "/"
+        self.log_level = Config.TaskLogLevel
+        self.logger = Logger(open(self.current_task_path + "task_log.txt", "w+"), level=self.log_level)
+        self.stage = TaskStage.Creating
+
+
         if role not in MPCRoles.roles:
             self.logger.logE("Not a valid mpc role: {}".format(role))
             self.stage = TaskStage.Error
+            return
         self.role = role
 
-        self.current_task_path = Config.TaskRootPath + task_name + "-%d" % client_id + "/"
-        self.stage = TaskStage.Creating
-        self.log_level = TaskConfig.TaskLogLevel
-        self.logger = Logger(open(self.current_task_path + "task_log.txt", "w+"), level=self.log_level)
+        if model_name not in MPCModels.models:
+            self.logger.logE("Not a valid mpc model: {}".format(model_name))
+            self.stage = TaskStage.Error
+            return
+        self.model_name = model_name
+
+        # Make Log and Data directories under task directory
+        try:
+            os.mkdir(self.current_task_path + "log")
+            self.task_log_path = self.current_task_path + "log/"
+        except:
+            self.logger.logE("Cannot create task log directory with root path {} and task_name {}".
+                             format(Config.TaskRootPath, task_name))
+            self.stage = TaskStage.Error
+            return
+
+        try:
+            os.mkdir(self.current_task_path + "Data")
+            self.task_data_path = self.current_task_path + "Data/"
+        except:
+            self.logger.logE("Cannot create task Data directory with root path {} and task_name {}".
+                             format(Config.TaskRootPath, task_name))
+            self.stage = TaskStage.Error
+            return
 
         # Since ip_dict maybe serialized from json. The key of ip_dict has to be int.
         self.ip_dict = str_dict_to_int(ip_dict)
 
         if isinstance(mpc_paras, dict):
             try:
-                self.mpc_paras = MPCClientParas(**mpc_paras)
+                mpc_paras = MPCClientParas(**mpc_paras)
             except:
                 self.logger.logE("mpc_paras not correct")
                 self.stage = TaskStage.Error
@@ -117,63 +138,44 @@ class MPCTask:
             self.logger.logE("mpc_paras must be a dict or a MPCClientParas instance")
             self.stage = TaskStage.Error
 
-        if role not in ["data_client", "label_client", "main_client", "crypto_producer"]:
-            msg = "Invalid role {}, role must be data_client or label_client.".format(role)
-            self.logger.logE(msg)
-            self.stage = TaskStage.Error
-
         self.name = task_name
         self.client_id = client_id
         self.mpc_paras = mpc_paras
+
         self.configs = configs
-
-        self.task_start_time = time.time()
-
-        self.task_manage_client = BaseClient(self.channel, None)
-        # Make Log and Data directories under task directory
-        try:
-            os.mkdir(Config.TaskRootPath + task_name + "-%d" % client_id + "/log")
-            self.task_log_path = Config.TaskRootPath + task_name + "-%d" % client_id + "/log/"
-        except:
-            self.logger.logE("Cannot create task log directory with root path {} and task_name {}".
-                             format(Config.TaskRootPath, task_name))
-        try:
-            os.mkdir(Config.TaskRootPath + task_name + "-%d" % client_id + "/Data")
-            self.task_data_path = Config.TaskRootPath + task_name + "-%d" % client_id + "/Data/"
-        except:
-            self.logger.logE("Cannot create task Data directory with root path {} and task_name {}".
-                             format(Config.TaskRootPath, task_name))
 
         # Create Communication channel
         try:
-            self.channel = Channel(client_id, "0.0.0.0:" + str(listen_port), len(ip_dict), ip_dict, time_out=30,
+            self.channel = Channel(client_id, "0.0.0.0:" + str(listen_port), len(ip_dict), self.ip_dict, time_out=60,
                                    logger=Logger(open(self.current_task_path + "log/channel_log.txt", "w+"), level=self.log_level))
         except:
             self.logger.logE("Cannot create channel with port {}, ip_dict {}".format(listen_port, ip_dict))
+            self.stage = TaskStage.Error
 
-        if add_query_service_to_computation_grpc_server(self):
+        self.task_start_time = time.time()
+
+        self.task_manage_client = BaseClient(self.channel, self.logger)
+
+
+        grpc_servicer = add_query_service_to_computation_grpc_server(self)
+        if grpc_servicer is not None:
             self.logger.log("Attach query service to computation grpc server. Available to query stask status")
         else:
             self.logger.logW("Cannot attach query service since compuation server is not grpc server.")
+        self.grpc_servicer = grpc_servicer
+        if self.grpc_servicer is not None:
+            self.grpc_servicer.add_query("stage", lambda: (TaskQueryStatus.ok, self.stage.name))
+
         self.stage = TaskStage.Created
 
     def start(self):
-        raise NotImplementedError()
+        if self.stage is TaskStage.Error:
+            self.logger.logE("Cannot start a error task.")
+            return False
 
-
-def create_task_pyscript(**kwargs):
-    os.mkdir(Config.TaskRootPath + kwargs["task_name"] + "-%d" % (kwargs["client_id"]))
-    task_script_string = \
-        "import sys, os\n" +\
-        "sys.path.append('{}')\n".format(re.escape(os.getcwd())) +\
-        "os.chdir('{}')\n".format(re.escape(os.getcwd())) +\
-        "from Server.TaskControl import MPCTask\n" +\
-        "task_config = {}\n".format(json.dumps(kwargs, indent=4)) +\
-        "task = MPCTask(**task_config)\n" +\
-        "task.start_all()\n"
-    pyscripte_file = open(Config.TaskRootPath + kwargs["task_name"] + "-%d" % kwargs["client_id"] + "/task.py", "w+")
-    pyscripte_file.write(task_script_string)
-    pyscripte_file.close()
+class TaskQueryStatus(enum.Enum):
+    ok = 0
+    err = 1
 
 
 class QueryMPCTaskServicer(message_pb2_grpc.QueryMPCTaskServicer):
@@ -187,20 +189,25 @@ class QueryMPCTaskServicer(message_pb2_grpc.QueryMPCTaskServicer):
         return self.task.stage.name
 
     def QueryTask(self, request: message_pb2.TaskQuery, context):
-        def encode(status: str, obj=None):
-            return message_pb2.TaskResponse(status=status, python_bytes=pickle.dumps(obj))
+        def encode(status: TaskQueryStatus, obj=None):
+            return message_pb2.TaskResponse(status=status.value, python_bytes=pickle.dumps(obj))
         if request.query_string not in self.query_dict:
-            return encode("Query url not exist")
+            return encode(TaskQueryStatus.err, "Query url not exist")
         status, resp = self.query_dict[request.query_string]()
         return encode(status, resp)
 
-
-
+    def add_query(self, url, func):
+        if callable(func):
+            self.query_dict[url] = func
+            return True
+        else:
+            return False
 
 def add_query_service_to_computation_grpc_server(task: MPCTask):
     from Communication.RPCComm import Peer
     peer = task.channel
     if not isinstance(peer, Peer):
-        return False
-    message_pb2_grpc.add_QueryMPCTaskServicer_to_server(QueryMPCTaskServicer(task), peer.server.server)
-    return True
+        return None
+    task_servicer = QueryMPCTaskServicer(task)
+    message_pb2_grpc.add_QueryMPCTaskServicer_to_server(task_servicer, peer.server.server)
+    return task_servicer

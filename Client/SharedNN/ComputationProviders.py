@@ -104,26 +104,45 @@ class MainClient(MPCC.MainClient):
         if self.error:
             return False
 
-    def __send_start_message_to(self, client_id, stop=False):
+    def __send_start_message_to(self, client_id, start_msg):
         try:
-            if not stop:
-                header = MessageType.NEXT_TRAIN_ROUND
-            else:
-                header = MessageType.TRAINING_STOP
-            start_data = None
-            if self.mpc_mode == MPCC.MPCClientMode.Test:
-                start_data = "Test"
-            self.send_check_msg(client_id, ComputationMessage(header, start_data))
+            self.send_check_msg(client_id, start_msg)
         except:
+            self.logger.logE("Send start message to client %d failed. Stop training." % client_id)
             self.error = True
+
 
     def __broadcast_start(self, stop=False):
         sending_threads = []
+        if stop:
+            header = MessageType.TRAINING_STOP
+        else:
+            header = MessageType.NEXT_TRAIN_ROUND
+
+        if self.mpc_mode == MPCC.MPCClientMode.Test:
+            start_data = "Test"
+        else:
+            start_data = None
+        start_msg = ComputationMessage(header, start_data)
+
+        def send_stop_to_crypto_producer():
+            try:
+                self.send_check_msg(self.crypto_producer_id,ComputationMessage(header, start_data, key="stop"))
+            except:
+                self.logger.logE("Sending stop message to crypto producer failed")
+                self.error = True
+
         for data_client in self.feature_client_ids + [self.label_client_id]:
-            sending_threads.append(threading.Thread(target=self.__send_start_message_to, args=(data_client, stop)))
+            sending_threads.append(threading.Thread(target=self.__send_start_message_to, args=(data_client, start_msg)))
             sending_threads[-1].start()
+        if stop:
+            sending_to_crypto_producer_thread = threading.Thread(target=send_stop_to_crypto_producer)
+            sending_to_crypto_producer_thread.start()
+
         for thread in sending_threads:
             thread.join()
+        if stop:
+            sending_to_crypto_producer_thread.join()
 
     def __recv_client_out_from(self, client_id):
         try:

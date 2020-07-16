@@ -13,7 +13,6 @@ class TaskParaGenerator:
         self.para_dict = para_dict
         self.ip_dict = None
         self.mpc_paras = None
-        self.client_paras = None
 
     def generate_paras(self):
         para_dict = self.para_dict
@@ -21,6 +20,11 @@ class TaskParaGenerator:
         if task_name is None:
             return "Para json must have key task_name"
         self.task_name = task_name
+
+        model_name = para_dict.get("model_name")
+        if model_name is None:
+            return "Para dict must have key model_name"
+        self.model_name = model_name
 
         clients = para_dict.get("clients")
         if clients is None:
@@ -32,12 +36,13 @@ class TaskParaGenerator:
                 "feature_client_ids": [2 + i for i in range(len(clients["feature_clients"]))],
                 "label_client_id": 2 + len(clients["feature_clients"])
             }
-        except:
-            return "Cannot generate mpc_paras. Para json is not correct."
+        except Exception as e:
+            return "Cannot generate mpc_paras. Para json is not correct: " + str(e)
 
         self.mpc_paras = mpc_paras
         try:
-            all_clients = [clients["main_client"], clients["crypto_producer"]] + clients["feature_clients"] + clients["data_client"]
+            all_clients = [clients["main_client"], clients["crypto_producer"]] + clients["feature_clients"] + \
+                          [clients["label_client"]]
             all_roles = [MPCRoles.MainProvider, MPCRoles.CryptoProvider] + \
                         [MPCRoles.FeatureProvider] * len(clients["feature_clients"]) + [MPCRoles.LabelProvider]
         except:
@@ -51,16 +56,18 @@ class TaskParaGenerator:
             self.ip_dict[i] = client["addr"] + ":%d" % client["computation_port"]
             self.http_dict[i] = client["addr"] + ":%d" % client["http_port"]
             self.client_paras[i] = {
+                "task_name": task_name,
+                "model_name": self.model_name,
                 "client_id": i,
                 "role": all_roles[i],
-                "listen_port": client["computation_port"]
+                "mpc_paras": self.mpc_paras,
+                "ip_dict": self.ip_dict,
+                "listen_port": client["computation_port"],
+                "configs": dict()
             }
 
-        model_name = para_dict.get("model_name")
-        if model_name is None:
-            return "Para dict must have key model_name"
-        self.model_name = model_name
-        return  ""
+
+        return ""
 
 
 def shared_mpc_para_generate(generator: TaskParaGenerator):
@@ -70,29 +77,37 @@ def shared_mpc_para_generate(generator: TaskParaGenerator):
     :return:
     """
     client_dims = dict()
-    for i, client in enumerate(generator.all_clients[2:-1]):
-        client_dims[i] = client["dim"]
+    for i, client in enumerate(generator.all_clients[2:]):
+        # Exclude the label client
+        if i != len(generator.all_clients[2:]) - 1:
+            client_dims[2 + i] = client["dim"]
+        generator.client_paras[2 + i]["configs"]["data_file"] = client["data_file"]
 
     if generator.model_name is MPCModels.SharedLR:
         out_dim = 1
         layers = []
     else:
         out_dim = 64
-        layers = [1]
+        # label client's dim
+        layers = [generator.all_clients[-1]["dim"]]
 
-    generator.client_paras[0]["configs"] = {
+    generator.client_paras[0]["configs"]["train_config"] = {
         "client_dims": client_dims,
         "out_dim": out_dim,
         "layers": layers,
         "batch_size": 64,
         "test_per_batch": 1001,
         "test_batch_size": None,
-        "max_iter": generator.para_dict["train_config"]["max_iter"],
+        "learning_rate": 0.1,
+        "max_iter": generator.para_dict["configs"]["train_config"]["max_iter"],
     }
-    generator.client_paras[-1]["configs"] = {
-        "loss_func": generator["train_config"]["loss"],
-        "metrics": generator["train_config"]["metrics"]
-    }
+
+    # Update label client's configs
+    generator.client_paras[-1]["configs"].update({
+        "loss_func": generator.para_dict["configs"]["train_config"]["loss_func"],
+        "metrics": generator.para_dict["configs"]["train_config"]["metrics"]
+    })
+
 
 
 generator_dict = {
@@ -112,5 +127,5 @@ def generate_paras(para_dict: dict):
         try:
             generator_dict[task_para_generator.model_name](task_para_generator)
         except Exception as e:
-            return "Generate model {}'s para error: {}".format(task_para_generator.model_name, err)
+            return "Generate model {}'s para error: {}".format(task_para_generator.model_name, e)
     return task_para_generator

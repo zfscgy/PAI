@@ -89,9 +89,10 @@ class Peer(BaseChannel):
                 self.receive_buffer[sender_id][msg.key] = []
             self.receive_buffer[sender_id][msg.key].append(msg)
             return True
-        return None
+        self.logger.logE("Received from id {} not in the ip_dict {}".format(sender_id, self.ip_dict))
+        return False
 
-    def receive(self, sender: int, time_out: float, key=None) -> ComputationMessage:
+    def receive(self, sender: int, time_out: float, key=None, **kwargs) -> ComputationMessage:
         """
         :param sender: 发送方
         :param time_out: 接收的延时。如果未设置则采用默认延时。
@@ -101,8 +102,11 @@ class Peer(BaseChannel):
             time_out = self.time_out
         start_receive_time = time.time()
         key_buffer = self.receive_buffer[sender].get(key)
+
+        try_interval = kwargs.get("interval") or 0.003
+
         while key_buffer is None or len(key_buffer) == 0:
-            time.sleep(0.002)
+            time.sleep(try_interval)
             key_buffer = self.receive_buffer[sender].get(key)
             if time.time() - start_receive_time > time_out:
                 self.logger.log("Timeout while receiving from client %d, key %s. Time elapsed %.3f" % (sender, str(key), time_out))
@@ -128,8 +132,8 @@ class Peer(BaseChannel):
                 return resp
             try:
                 resp = self.rpc_clients[receiver].sendComputationMessage(msg, self.client_id, time_out)
-            except:
-                self.logger.logE("Error while sending to client %d" % receiver)
+            except Exception as e:
+                self.logger.logE("Error while sending to client %d" % receiver + ":" + str(e))
                 return resp
         return resp
 

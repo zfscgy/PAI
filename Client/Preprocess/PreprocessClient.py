@@ -109,6 +109,7 @@ class PreprocessClient(MPCClient):
         self.sample_ids = encrypted_ids
 
     def start_align(self):
+        self.logger.log("Start generating random keys and ivs")
         self.generate_raw_key_and_iv()
         self.__send_aes_keys()
         if self.error:
@@ -120,13 +121,15 @@ class PreprocessClient(MPCClient):
             self.logger.logE("Receive aes keys failed, stop align")
             return False
 
+
         self.__generate_shared_key()
+        self.logger.log("Shared key generated. Start encrypt ids.")
         try:
             self.__load_and_enc_data()
         except:
             self.logger.logE("Error while loading and encrypting data. Stop align")
             return False
-
+        self.logger.log("Start sending encrypted ids to main preprocessor")
         try:
             self.send_check_msg(self.main_client_id, ComputationMessage(MessageType.ALIGN_ENC_IDS, self.sample_ids))
         except:
@@ -139,6 +142,7 @@ class PreprocessClient(MPCClient):
             self.logger.logE("Error while receiving ids intersection from align_server")
             return False
 
+        self.logger.log("Received aligned ids. Start making aligned data.")
         encrypted_ids = msg.data
         selected_ids = list()
         for sample_id in encrypted_ids:
@@ -150,16 +154,15 @@ class PreprocessClient(MPCClient):
         file_name = pathlib.Path(self.filepath).name
 
         self.out_indexed_file = self.out_dir + file_name[:-4] + "_aligned.csv"
-        aligned_data.to_csv(self.out_indexed_file, header=None, index=True)
+        aligned_data.to_csv(self.out_indexed_file, header=None,  index=True)
         test_size = int(len(selected_ids) / 5)
-        train_data = aligned_data[:-test_size]
+        train_data = aligned_data.iloc[:-test_size]
         test_data = aligned_data.iloc[-test_size:]
 
         self.train_data_path = self.out_dir + file_name[:-4] + "_train.csv"
         self.test_data_path = self.out_dir + file_name[:-4] + "_test.csv"
         train_data.to_csv(self.train_data_path, header=None, index=False)
         test_data.to_csv(self.test_data_path, header=None, index=False)
-
 
         self.logger.log("Align finished, aligned file saved in " + self.out_dir)
         return True

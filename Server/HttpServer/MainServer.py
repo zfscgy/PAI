@@ -3,8 +3,10 @@ from flask import Flask, request
 import requests
 import json
 import os
-from Utils.Log import Logger
 
+from Communication.protobuf.message_pb2 import TaskQuery
+from Utils.Log import Logger
+from Server.TaskControl.MPCTaskQuery import MPCTaskQueryClient
 
 main_server = Flask(__name__)
 
@@ -41,11 +43,13 @@ def create_task():
         logger.logE(err)
         return resp_msg("err", err)
 
+    # Save json file
     task_name = post_data["task_name"]
     if os.path.isfile(ServerTaskRoot + task_name + ".json"):
         logger.logE("Task with name {} already exists".format(task_name))
         return resp_msg("err", "Task with name {} already exists".format(task_name))
 
+    # Generate client task parameters
     task_paras = generate_paras(post_data)
     if isinstance(task_paras, str):
         logger.logE("Generate task parameters from post_json failed: " + task_paras)
@@ -55,9 +59,10 @@ def create_task():
     client_http_addrs = task_paras.http_dict
 
     post_errors = {}
-    def post_to_client_webserver(client_task_para):
+    def post_to_client_webserver(client_id):
+        client_task_para = client_task_paras[client_id]
         try:
-            resp = requests.post(ClientProtocol + client_http_addrs + "/createTask", json=client_task_para)
+            resp = requests.post(ClientProtocol + client_http_addrs[client_id] + "/createTask", json=client_task_para)
         except Exception as e:
             err = "Post to client /createTask failed, error {}".format(e)
             logger.logE(err)
@@ -76,7 +81,7 @@ def create_task():
 
     posting_threads = []
     for client_id in range(len(client_task_paras)):
-        posting_threads.append(threading.Thread(target=post_to_client_webserver, args=(client_task_paras[client_id],),
+        posting_threads.append(threading.Thread(target=post_to_client_webserver, args=(client_id,),
                                                 name="Thread-PostCreateTask-to-Client-%d" % client_id))
         posting_threads[-1].start()
 
@@ -93,6 +98,9 @@ def create_task():
     return resp_msg()
 
 
+task_query_dict = dict()
+
+
 @main_server.route("/startTask", methods=["GET"])
 def start_task():
     task_name = request.args.get("task_name")
@@ -106,6 +114,7 @@ def start_task():
     task_para_generator = TaskParaGenerator(task_json)
     task_para_generator.generate_paras()
     client_addrs = task_para_generator.http_dict
+    client_grpc_addrs = task_para_generator.ip_dict
 
     startTask_errors = {}
     def request_to_clients(client_id):
@@ -138,9 +147,34 @@ def start_task():
         request_task.join()
 
     if len(startTask_errors) == 0:
+        grpc_clients = [
+            MPCTaskQueryClient(client_grpc_addrs[i]) for i in range(len(client_grpc_addrs))
+        ]
+        task_query_dict[task_name] = grpc_clients
         return resp_msg()
 
     else:
         error_msgs = "Get request for client startTask failed with message:\n" + str(startTask_errors)
         logger.log(error_msgs)
         return resp_msg("err", error_msgs)
+
+
+@main_server.route("/queryTask", methods=["GET"])
+def query_task():
+    task_name = request.args.get("task_name")
+    query = request.args.get("query")
+    client_id = request.args.get("client", type=int)
+    if task_name is None or query is None:
+        return resp_msg("err", "Url arguments missing, must have task_name and query")
+    if task_name not in task_query_dict:
+        return resp_msg("err", "Task not exist")
+    client_id = client_id or 0
+    if client_id >= len(task_query_dict[task_name]):
+        return resp_msg("err", "Client not exist")
+    try:
+        res = task_query_dict[task_name][client_id].query(TaskQuery(query_string=query))
+        logger.log("Answered query. task name: {} url: {}, client: {}, res: {}".format(task_name, query, client_id, res))
+        return resp_msg("ok", res)
+    except Exception as e:
+        logger.logE("GRPC query failed: " + str(e))
+        return resp_msg("err", "Query client grpc failed")
