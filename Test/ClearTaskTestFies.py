@@ -5,10 +5,13 @@ print("Start cleaning task test files...")
 for log_file in pathlib.Path("Test/Log/").iterdir():
     print("Removing: ", log_file)
     os.remove(str(log_file))
-for task_json in pathlib.Path("Test/TestTasksRoot/MainServerRoot/").iterdir():
+for task_json in pathlib.Path("Test/TestTasks/MainServerRoot/").iterdir():
     print("Removing: ", task_json)
     os.remove(str(task_json))
-for task_dir in pathlib.Path("Test/TestTasksRoot/ClientTaskRoot/").iterdir():
+for task_dir in pathlib.Path("Test/TestTasks/ClientTaskRoot/").iterdir():
     print("Removing: ", task_dir)
     shutil.rmtree(str(task_dir))
+for datagen_dir in pathlib.Path("Test/TestDataset/GeneratedData/").iterdir():
+    print("Removing: ", datagen_dir)
+    shutil.rmtree(str(datagen_dir))
 print("done.")

@@ -1,4 +1,4 @@
-from Communication.Message import ComputationMessage
+from Communication.Message import PackedMessage
 from Utils.Log import Logger
 import sys
 
@@ -16,13 +16,13 @@ class BaseChannel:
             logger = Logger()
         self.logger = logger
 
-    def send(self, receiver: int, msg: ComputationMessage, time_out: float):
+    def send(self, receiver: int, msg: PackedMessage, time_out: float):
         """
         :return: `True` if message is send successfully. If the port is occupied, wait for time_outs.
         """
         raise NotImplementedError()
 
-    def receive(self, sender: int, time_out: float, key=None, **kwargs) -> ComputationMessage:
+    def receive(self, sender: int, time_out: float, key=None, **kwargs) -> PackedMessage:
         raise NotImplementedError()
 
     def clean(self) -> bool:

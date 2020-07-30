@@ -3,16 +3,15 @@ from flask import Flask, request
 import requests
 import json
 import os
-
 from Communication.protobuf.message_pb2 import TaskQuery
 from Utils.Log import Logger
-from Server.TaskControl.MPCTaskQuery import MPCTaskQueryClient
+from Task.TaskQuery import TaskQueryClient
+from Server.HttpServer.ServerConfig import ServerLogPath, ServerTaskRoot
+from Server.HttpServer.TaskParaGenerator import generate_task_paras
+from Server.HttpServer.BroadcastRequests import broadcast_request
+
 
 main_server = Flask(__name__)
-
-from Server.HttpServer.ServerConfig import ServerLogPath, ServerTaskRoot, ClientProtocol
-from Server.HttpServer.TaskParaGenerator import TaskParaGenerator, generate_paras
-
 
 logger = Logger(open(ServerLogPath + "/main_server-%d_log.txt" % id(main_server), "a"), level=0)
 
@@ -50,48 +49,31 @@ def create_task():
         return resp_msg("err", "Task with name {} already exists".format(task_name))
 
     # Generate client task parameters
-    task_paras = generate_paras(post_data)
-    if isinstance(task_paras, str):
-        logger.logE("Generate task parameters from post_json failed: " + task_paras)
-        return resp_msg("err", "Generate task parameters from post_json failed: " + task_paras)
-
-    client_task_paras = task_paras.client_paras
-    client_http_addrs = task_paras.http_dict
-
-    post_errors = {}
-    def post_to_client_webserver(client_id):
-        client_task_para = client_task_paras[client_id]
-        try:
-            resp = requests.post(ClientProtocol + client_http_addrs[client_id] + "/createTask", json=client_task_para)
-        except Exception as e:
-            err = "Post to client /createTask failed, error {}".format(e)
-            logger.logE(err)
-            post_errors[client_id] = err
-            return
-        if resp.status_code != requests.codes.ok:
-            err = "Post to client /createTask failed, with status code %d" % resp.status_code
-            logger.logE(err)
-            post_errors[client_id] = True
-        else:
-            resp_msg = resp.json()
-            if resp_msg["status"] != "ok":
-                err = "Received error response from client {}, message {}".format(client_id, resp_msg)
-                logger.logE(err)
-                post_errors[client_id] = err
-
-    posting_threads = []
-    for client_id in range(len(client_task_paras)):
-        posting_threads.append(threading.Thread(target=post_to_client_webserver, args=(client_id,),
-                                                name="Thread-PostCreateTask-to-Client-%d" % client_id))
-        posting_threads[-1].start()
-
-    for posting_thread in posting_threads:
-        posting_thread.join()
-
-    if len(post_errors) != 0:
-        err = "Failed to post to client /createTask. Error state of clients:" + str(post_errors)
+    try:
+        client_paras, client_http_addrs = generate_task_paras(post_data)
+    except Exception as e:
+        err = "Generate task parameters failed: " + str(e)
         logger.logE(err)
         return resp_msg("err", err)
+
+    global http_query_dict
+    http_query_dict[task_name] = client_http_addrs
+
+    client_errs, client_resps = broadcast_request([client_addr + "/createTask" for client_addr in client_http_addrs],
+                                                  "post", jsons=client_paras)
+    if len(client_errs) != 0:
+        err = "CreateTask failed due to POST error: " + str(client_errs)
+        logger.logE(err)
+        return resp_msg("err", err)
+
+    err_status = False
+    for i, client_resp in enumerate(client_resps):
+        if client_resp["status"] != "ok":
+            err = "Create task failed. Client %d return err status:" % i + str(client_resp)
+            logger.logE(err)
+            err_status = True
+    if err_status:
+        return resp_msg("err", client_resps)
 
     json.dump(post_data, open(ServerTaskRoot + task_name + ".json", "w+"), indent=4)
     logger.log("Task Created, Save json file in " + ServerTaskRoot + task_name + ".json")
@@ -99,7 +81,7 @@ def create_task():
 
 
 task_query_dict = dict()
-
+http_query_dict = dict()
 
 @main_server.route("/startTask", methods=["GET"])
 def start_task():
@@ -111,52 +93,32 @@ def start_task():
         logger.logE("Cannot load task:\n" + err)
         return resp_msg("err", err)
 
-    task_para_generator = TaskParaGenerator(task_json)
-    task_para_generator.generate_paras()
-    client_addrs = task_para_generator.http_dict
-    client_grpc_addrs = task_para_generator.ip_dict
+    client_paras, client_addrs = generate_task_paras(task_json)
 
-    startTask_errors = {}
-    def request_to_clients(client_id):
-        try:
-            resp = requests.get(ClientProtocol + client_addrs[client_id] + "/startTask",
-                                {"task_name": task_name, "client_id": client_id})
-        except Exception as e:
-            err = "Get request for client startTask failed with client id %d, Error:\n".format(client_id) + str(e)
+    client_errs, client_resps = broadcast_request([client_addr + "/startTask" for client_addr in client_addrs],
+                                                  "get", params=[{"task_name": task_name, "client_id": i}
+                                                                for i in range(len(client_addrs))])
+
+    if len(client_errs) != 0:
+        err = "Failed to startTask due to GET error: " + str(client_errs)
+        logger.logE(err)
+        return resp_msg("err", err)
+
+    err_status = False
+    for i, client_resp in enumerate(client_resps):
+        if client_resp["status"] != "ok":
+            err = "StartTask Failed. Client %d return err status:" % i + str(client_resp)
             logger.logE(err)
-            startTask_errors[client_id] = err
-            return
-        if resp.status_code != requests.codes.ok:
-            err = "Get request for client startTask failed with status code {}, client id {}".\
-                       format(resp.status_code, client_id)
-            logger.logE(err)
-            startTask_errors[client_id] = err
-            return
-        resp = resp.json()
-        if resp["status"] != "ok":
-            err = "Get request for client startTask failed with error message {}, client id {}".format(resp["msg"], client_id)
-            logger.logE(err)
-            startTask_errors[client_id] = err
-            return
+            err_status = True
+    if err_status:
+        return resp_msg("err", "StartTask Failed: " + str(client_resps))
 
-    request_tasks = []
-    for i, addr in enumerate(client_addrs):
-        request_tasks.append(threading.Thread(target=request_to_clients, args=(i,)))
-        request_tasks[-1].start()
-    for request_task in request_tasks:
-        request_task.join()
-
-    if len(startTask_errors) == 0:
-        grpc_clients = [
-            MPCTaskQueryClient(client_grpc_addrs[i]) for i in range(len(client_grpc_addrs))
-        ]
-        task_query_dict[task_name] = grpc_clients
-        return resp_msg()
-
-    else:
-        error_msgs = "Get request for client startTask failed with message:\n" + str(startTask_errors)
-        logger.log(error_msgs)
-        return resp_msg("err", error_msgs)
+    grpc_clients = [
+        TaskQueryClient(client_addrs[i].split(":")[0] + ":%d" % client_para["client_config"]["computation_port"])
+        for i, client_para in enumerate(client_paras)
+    ]
+    task_query_dict[task_name] = grpc_clients
+    return resp_msg()
 
 
 @main_server.route("/queryTask", methods=["GET"])
@@ -174,7 +136,27 @@ def query_task():
     try:
         res = task_query_dict[task_name][client_id].query(TaskQuery(query_string=query))
         logger.log("Answered query. task name: {} url: {}, client: {}, res: {}".format(task_name, query, client_id, res))
-        return resp_msg("ok", res)
+        return res
     except Exception as e:
         logger.logE("GRPC query failed: " + str(e))
         return resp_msg("err", "Query client grpc failed")
+
+
+@main_server.route("/queryStatus", methods=["GET"])
+def query_status():
+    task_name = request.args.get("task_name")
+    if task_name in http_query_dict:
+        client_addrs = http_query_dict[task_name]
+    else:
+        if not os.path.isfile(ServerTaskRoot + task_name + ".json"):
+            return resp_msg("ok", "NotExist")
+        client_addrs = generate_task_paras(json.load(open(ServerTaskRoot + task_name + ".json")))[1]
+        http_query_dict[task_name] = client_addrs
+    try:
+        resp = requests.get(client_addrs[0] + "/queryStatus", params={"task_name": task_name})
+    except:
+        return resp_msg("Failed to get task status. The main client's address {} is unavailable".format(client_addrs[0]))
+    if resp.status_code != requests.codes.ok:
+        return resp_msg(
+            "Failed to get task status. The main client's address {} is unavailable".format(client_addrs[0]))
+    return resp.json()

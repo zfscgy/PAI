@@ -1,7 +1,7 @@
 import threading
 
 from Communication.RPCComm import Peer
-from Client.Preprocess.PreprocessClient import PreprocessClient, MainPreprocessor
+from Client.Preprocess.AlignmentClient import PreprocessClient, MainPreprocessor
 from Client.MPCClient import MPCClientParas
 from Utils.Log import Logger
 from Crypto import Random

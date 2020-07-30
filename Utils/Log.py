@@ -30,5 +30,7 @@ class Logger:
             self.logger.write("In thread: " + threading.current_thread().name + "\n")
             self.write_lock.release()
             self.logger.flush()
+
     def __del__(self):
-        self.logger.close()
+        if self.logger is not sys.stdout:
+            self.logger.close()

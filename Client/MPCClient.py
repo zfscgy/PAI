@@ -17,14 +17,16 @@ class MPCClientException(Exception):
 
 
 class MPCClientParas:
-    def __init__(self, feature_client_ids: list, label_client_id: int, main_client_id: int, crypto_producer_id: int):
+    def __init__(self, feature_client_ids: list, label_client_id: int, main_client_id: int, crypto_producer_id: int,
+                 other_clients: dict=None):
         self.feature_client_ids = feature_client_ids
         self.label_client_id = label_client_id
         self.main_client_id = main_client_id
         self.crypto_producer_id = crypto_producer_id
+        self.other_clients = other_clients
 
 
-class MPCClientMode(Enum):
+class ClientMode(Enum):
     Train = 0
     Test = 1
     Predict = 2
@@ -32,13 +34,13 @@ class MPCClientMode(Enum):
 
 
 class MPCClient(BaseClient):
-    def __init__(self, channel: BaseChannel, logger: Logger, mpc_paras: MPCClientParas, mpc_mode: MPCClientMode):
+    def __init__(self, channel: BaseChannel, logger: Logger, mpc_paras: MPCClientParas):
         super(MPCClient, self).__init__(channel, logger)
         self.feature_client_ids = mpc_paras.feature_client_ids
         self.label_client_id = mpc_paras.label_client_id
         self.main_client_id = mpc_paras.main_client_id
         self.crypto_producer_id = mpc_paras.crypto_producer_id
-        self.mpc_mode = mpc_mode
+        self.mpc_mode = ClientMode.Train
 
 
 class ProprecessClient(MPCClient):
@@ -51,7 +53,7 @@ class ProprecessClient(MPCClient):
         :param source_data_file:
         :param out_data_dir:
         """
-        super(ProprecessClient, self).__init__(channel, logger, mpc_paras, MPCClientMode.Any)
+        super(ProprecessClient, self).__init__(channel, logger, mpc_paras)
         self.other_data_client_ids = mpc_paras.feature_client_ids.copy()
         self.other_data_client_ids.remove(self.client_id)
         if os.path.isfile(source_data_file):
@@ -68,7 +70,7 @@ class ProprecessClient(MPCClient):
 
 
 class DataClient(MPCClient):
-    def __init__(self, channel: BaseChannel, logger: Logger, mpc_paras: MPCClientParas, mpc_mode: MPCClientMode,
+    def __init__(self, channel: BaseChannel, logger: Logger, mpc_paras: MPCClientParas,
                  train_data_loader: DataLoader, test_data_loader: DataLoader):
         """
         :param channel:
@@ -77,9 +79,10 @@ class DataClient(MPCClient):
         :param train_data_loader:
         :param test_data_loader:
         """
-        super(DataClient, self).__init__(channel, logger, mpc_paras, mpc_mode)
+        super(DataClient, self).__init__(channel, logger, mpc_paras)
         self.train_data_loader = train_data_loader
         self.test_data_loader = test_data_loader
+        self.data_shape = train_data_loader.shape()
 
     def start_train(self) -> bool:
         raise NotImplementedError()
@@ -90,9 +93,8 @@ class DataClient(MPCClient):
 
 class MainClient(MPCClient):
     def __init__(self, channel: BaseChannel, logger: Logger,
-                 mpc_paras: MPCClientParas, mpc_mode: MPCClientMode, main_config: dict):
-        super(MainClient, self).__init__(channel, logger, mpc_paras, mpc_mode)
-        self.config = main_config
+                 mpc_paras: MPCClientParas):
+        super(MainClient, self).__init__(channel, logger, mpc_paras)
 
     def start_train(self) -> bool:
         raise NotImplementedError()

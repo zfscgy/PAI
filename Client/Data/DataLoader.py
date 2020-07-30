@@ -1,11 +1,15 @@
 import numpy as np
 import pandas as pd
 
+
 class DataLoader:
     def set_random_seed(self, random_seed: int):
         raise NotImplementedError
 
     def get_batch(self, batch_size: int):
+        raise NotImplementedError()
+
+    def shape(self):
         raise NotImplementedError()
 
 
@@ -28,3 +32,6 @@ class CSVDataLoader(DataLoader):
             return self.data
         indices = self.random_generator.choice(self.data.shape[0], batch_size)
         return self.data[indices]
+
+    def shape(self):
+        return self.data.shape[1:]

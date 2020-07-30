@@ -1,8 +1,8 @@
 import numpy as np
 import threading
-from Client.Client import BaseClient
-from Client.MPCClient import MPCClient, MPCClientParas, MPCClientMode
-from Communication.Message import MessageType, ComputationMessage
+import time
+from Client.MPCClient import MPCClient, MPCClientParas, ClientMode
+from Communication.Message import MessageType, PackedMessage
 from Communication.Channel import BaseChannel
 from Utils.Log import Logger
 
@@ -11,17 +11,19 @@ class TripletProducer(MPCClient):
     """
     A client for generate beaver triples. It can listen to other clients
     """
-    def __init__(self, channel: BaseChannel, logger:Logger, mpc_paras: MPCClientParas):
-        super(TripletProducer, self).__init__(channel, logger, mpc_paras, MPCClientMode.Any)
-        self.listen_client_ids = mpc_paras.feature_client_ids + [mpc_paras.main_client_id, mpc_paras.label_client_id]
+    def __init__(self, channel: BaseChannel, logger:Logger, mpc_paras: MPCClientParas, listen_clients):
+        super(TripletProducer, self).__init__(channel, logger, mpc_paras)
+        self.listen_client_ids = listen_clients
         self.triplet_proposals = dict()
         self.listening_thread = [None for _ in range(channel.n_clients)]
         self.listening = False
 
+        self.last_msg_time = time.time()
+
     def __listen_to(self, sender: int):
         msg = self.receive_msg(sender, time_out=120)
         if msg is not None:
-            if msg.header == MessageType.SET_TRIPLET:
+            if msg.header == MessageType.Triplet_Set:
                 operand_sender, target, shape_sender, shape_target = msg.data
                 existing_shapes = self.triplet_proposals.get((target, sender))
                 if existing_shapes is not None:
@@ -34,16 +36,28 @@ class TripletProducer(MPCClient):
                     self.triplet_proposals[(sender, target)] = (operand_sender, shape_sender, shape_target)
             else:
                 self.logger.logW("Expect SET_TRIPLET message, but received %s from %d" % (msg.header, sender))
+            return True
+        else:
+            return False
 
     def __receive_stop_msg(self):
         # Check if there's main client's training stop message every 15 seconds.
-        self.receive_check_msg(self.main_client_id, MessageType.TRAINING_STOP, key="stop", time_out=1000000, interval=15)
-        self.logger.log("Received stop messgae from main_client. Stop listening. ")
+        while True:
+            try:
+                self.receive_check_msg(self.main_client_id, MessageType.Common_Stop, key="Stop", time_out=15, interval=5)
+            except Exception as e:
+                if not self.listening:
+                    self.stop_listening()
+                    return False
+                continue
+            break
+        self.logger.log("Received stop message from main_client. Stop listening. ")
         self.stop_listening()
+        return True
 
-    def __generate_and_send_triplets(self, first_operand: int, clients, shapes):
+    def __generate_and_send_triplets(self, op_position: int, clients, shapes):
         # 判断哪一个是乘数，哪一个是被乘数
-        if first_operand == 2:
+        if op_position == 2:
             shapes = [shapes[1], shapes[0]]
             clients = [clients[1], clients[0]]
         u0 = np.random.uniform(-1, 1, shapes[0])
@@ -54,17 +68,23 @@ class TripletProducer(MPCClient):
         z0 = z * np.random.uniform(0, 1, z.shape)
         z1 = z - z0
         try:
-            self.send_check_msg(clients[0], ComputationMessage(MessageType.TRIPLE_ARRAY, (clients[1], u0, v0, z0), clients[1]))
+            self.send_check_msg(clients[0], PackedMessage(MessageType.Triplet_Array, (clients[1], u0, v0, z0), clients[1]))
         except:
             self.logger.logE("Sending triplets to client %d failed" % clients[0])
         try:
-            self.send_check_msg(clients[1], ComputationMessage(MessageType.TRIPLE_ARRAY, (clients[0], v1, u1, z1), clients[0]))
+            self.send_check_msg(clients[1], PackedMessage(MessageType.Triplet_Array, (clients[0], v1, u1, z1), clients[0]))
         except:
             self.logger.logE("Sending triplets to client %d failed" % clients[1])
 
     def __listen_to_client(self, sender_id):
         while self.listening:
-            self.__listen_to(sender_id)
+            if self.__listen_to(sender_id):
+                self.last_msg_time = time.time()
+            else:
+                if time.time() - self.last_msg_time > 120:
+                    if self.listening:
+                        self.logger.logW("Did not receive any message for 120s. Stop listening.")
+                        self.listening = False
 
     def start_listening(self):
         """
@@ -75,7 +95,8 @@ class TripletProducer(MPCClient):
             self.listening_thread[i] = threading.Thread(target=self.__listen_to_client, args=(i,),
                                                         name="Triplet-Listening-to-%d" % i)
             self.listening_thread[i].start()
-        self.__receive_stop_msg()
+        self.logger.log("Started listening to clients: {}".format(self.listen_client_ids))
+        return self.__receive_stop_msg()
 
     def stop_listening(self):
         """

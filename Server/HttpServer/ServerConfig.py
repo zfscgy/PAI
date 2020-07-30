@@ -1,3 +1,3 @@
 ServerLogPath = "Test/Log/"
-ServerTaskRoot = "Test/TestTasksRoot/MainServerRoot/"
+ServerTaskRoot = "Test/TestTasks/MainServerRoot/"
 ClientProtocol = "http://"

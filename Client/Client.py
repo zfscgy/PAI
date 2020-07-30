@@ -1,4 +1,4 @@
-from Communication.Message import MessageType, ComputationMessage
+from Communication.Message import MessageType, PackedMessage
 from Communication.Channel import BaseChannel
 from Utils.Log import Logger
 
@@ -28,7 +28,7 @@ class BaseClient:
             logger = Logger()
         self.logger = logger
 
-    def send_msg(self, receiver: int, msg: ComputationMessage, time_out=None):
+    def send_msg(self, receiver: int, msg: PackedMessage, time_out=None):
         """
         Send a message to the receiver
 
@@ -54,11 +54,10 @@ class BaseClient:
             raise ClientException("Receive check fails: " + msg)
         return msg
 
-    def send_check_msg(self, receiver: int, msg: ComputationMessage, time_out=None):
+    def send_check_msg(self, receiver: int, msg: PackedMessage, time_out=None):
         resp = self.send_msg(receiver, msg, time_out)
         if resp.header != MessageType.RECEIVED_OK:
             msg = "Send message %s to client %d failed" % (str(msg.header), receiver)
             self.logger.logE(msg)
             raise ClientException("Send check fails: " + msg)
         return True
-

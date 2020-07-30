@@ -4,6 +4,6 @@ WORKDIR /usr/src/PAI
 
 COPY . .
 
-RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple  -r requirements.txt
+RUN pip install -r requirements.txt
 
-ENV PYTHONPATH=$PYTHONPATH:/usr/src/PAI:$PATH
+ENV PYTHONPATH=$PYTHONPATH:/usr/src/PAI

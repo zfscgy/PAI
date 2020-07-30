@@ -4,9 +4,9 @@ import numpy as np
 import pathlib
 from Client.Client import BaseClient
 from Communication.Channel import BaseChannel
-from Communication.Message import ComputationMessage, MessageType
+from Communication.Message import PackedMessage, MessageType
 from Utils.Log import Logger
-from Client.MPCClient import MPCClient, MPCClientParas, MPCClientMode
+from Client.MPCClient import MPCClient, MPCClientParas, ClientMode
 
 from Crypto.Cipher import AES
 
@@ -16,7 +16,7 @@ class PreprocessClient(MPCClient):
 
     def __init__(self, channel: BaseChannel, logger: Logger, mpc_paras: MPCClientParas,
                  filepath: str, out_dir: str):
-        super(PreprocessClient, self).__init__(channel, logger, mpc_paras, MPCClientMode.Any)
+        super(PreprocessClient, self).__init__(channel, logger, mpc_paras)
         self.filepath = filepath
         self.out_dir = out_dir
         self.other_data_client_ids = self.feature_client_ids + [self.label_client_id]
@@ -50,8 +50,8 @@ class PreprocessClient(MPCClient):
 
     def __send_aes_key_to(self, client_id):
         try:
-            self.send_check_msg(client_id, ComputationMessage(MessageType.ALIGN_AES_KEY,
-                                                              (self.shared_aes_key, self.shared_aes_iv)))
+            self.send_check_msg(client_id, PackedMessage(MessageType.ALIGN_AES_KEY,
+                                                         (self.shared_aes_key, self.shared_aes_iv)))
         except:
             self.logger.logE("Send raw aes key to client %d failed." % client_id)
             self.error = True
@@ -131,7 +131,7 @@ class PreprocessClient(MPCClient):
             return False
         self.logger.log("Start sending encrypted ids to main preprocessor")
         try:
-            self.send_check_msg(self.main_client_id, ComputationMessage(MessageType.ALIGN_ENC_IDS, self.sample_ids))
+            self.send_check_msg(self.main_client_id, PackedMessage(MessageType.ALIGN_ENC_IDS, self.sample_ids))
         except:
             self.logger.logE("Error while sending aligned ids to align server. Stop align")
             return False
@@ -159,8 +159,8 @@ class PreprocessClient(MPCClient):
         train_data = aligned_data.iloc[:-test_size]
         test_data = aligned_data.iloc[-test_size:]
 
-        self.train_data_path = self.out_dir + file_name[:-4] + "_train.csv"
-        self.test_data_path = self.out_dir + file_name[:-4] + "_test.csv"
+        self.train_data_path = self.out_dir + "train.csv"
+        self.test_data_path = self.out_dir + "test.csv"
         train_data.to_csv(self.train_data_path, header=None, index=False)
         test_data.to_csv(self.test_data_path, header=None, index=False)
 
@@ -170,7 +170,7 @@ class PreprocessClient(MPCClient):
 
 class MainPreprocessor(MPCClient):
     def __init__(self, channel: BaseChannel, logger: Logger, mpc_paras: MPCClientParas):
-        super(MainPreprocessor, self).__init__(channel, logger, mpc_paras, MPCClientMode.Any)
+        super(MainPreprocessor, self).__init__(channel, logger, mpc_paras)
         self.data_clients = self.feature_client_ids + [self.label_client_id]
         self.client_dataid_lists = []
         self.aligned_ids = None
@@ -195,7 +195,7 @@ class MainPreprocessor(MPCClient):
 
     def __send_aligned_ids_to(self, client_id):
         try:
-            self.send_check_msg(client_id, ComputationMessage(MessageType.ALIGN_FINAL_IDS, self.aligned_ids))
+            self.send_check_msg(client_id, PackedMessage(MessageType.ALIGN_FINAL_IDS, self.aligned_ids))
         except:
             self.logger.logE("Sending aligned ids to client %d failed" % client_id)
             self.error = True

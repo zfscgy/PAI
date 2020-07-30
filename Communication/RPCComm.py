@@ -7,18 +7,18 @@ import datetime
 import concurrent.futures as futures
 from Communication.Channel import BaseChannel
 from Communication.protobuf import message_pb2, message_pb2_grpc
-from Communication.Message import MessageType, ComputationMessage
+from Communication.Message import MessageType, PackedMessage
 from Utils.Log import Logger
 
 
-def encode_ComputationData(computation_message: ComputationMessage):
+def encode_ComputationData(computation_message: PackedMessage):
     return message_pb2.ComputationData(
         type=computation_message.header.value,
         python_bytes=pickle.dumps((computation_message.data, computation_message.key)))
 
 def decode_ComputationData(computation_data: message_pb2.ComputationData):
     data, key = pickle.loads(computation_data.python_bytes)
-    return ComputationMessage(MessageType(computation_data.type), data, key)
+    return PackedMessage(MessageType(computation_data.type), data, key)
 
 
 class ComputationRPCClient:
@@ -40,9 +40,10 @@ class ComputationServicer(message_pb2_grpc.MPCServiceServicer):
     def GetComputationData(self, request, context):
         msg = decode_ComputationData(request)
         if self.msg_handler(msg, request.client_id):
-            return encode_ComputationData(ComputationMessage(header=MessageType.RECEIVED_OK, data=None))
+            return encode_ComputationData(PackedMessage(header=MessageType.RECEIVED_OK, data=None))
         else:
-            return encode_ComputationData(ComputationMessage(header=MessageType.RECEIVED_ERR, data="Buffer occupied, send it later"))
+            return encode_ComputationData(PackedMessage(header=MessageType.RECEIVED_ERR, data="Buffer occupied, send it later"))
+
 
 class ComputationRPCServer:
     def __init__(self, port, max_workers, msg_handler):
@@ -77,7 +78,7 @@ class Peer(BaseChannel):
         self.server.start()
         self.logger.log("Peer id %d started." % self.client_id)
 
-    def buffer_msg(self, msg: ComputationMessage, sender_id):
+    def buffer_msg(self, msg: PackedMessage, sender_id):
         """
         将接收到的信息进行缓存
         :param msg:
@@ -92,7 +93,7 @@ class Peer(BaseChannel):
         self.logger.logE("Received from id {} not in the ip_dict {}".format(sender_id, self.ip_dict))
         return False
 
-    def receive(self, sender: int, time_out: float, key=None, **kwargs) -> ComputationMessage:
+    def receive(self, sender: int, time_out: float, key=None, **kwargs) -> PackedMessage:
         """
         :param sender: 发送方
         :param time_out: 接收的延时。如果未设置则采用默认延时。
@@ -101,11 +102,12 @@ class Peer(BaseChannel):
         if not time_out:
             time_out = self.time_out
         start_receive_time = time.time()
-        key_buffer = self.receive_buffer[sender].get(key)
+        if self.receive_buffer[sender].get(key) is None:
+            self.receive_buffer[sender][key] = []
+        key_buffer = self.receive_buffer[sender][key]
+        try_interval = kwargs.get("interval") or 0.001
 
-        try_interval = kwargs.get("interval") or 0.003
-
-        while key_buffer is None or len(key_buffer) == 0:
+        while len(key_buffer) == 0:
             time.sleep(try_interval)
             key_buffer = self.receive_buffer[sender].get(key)
             if time.time() - start_receive_time > time_out:
@@ -115,7 +117,7 @@ class Peer(BaseChannel):
         del key_buffer[0]
         return msg
 
-    def send(self, receiver: int, msg: ComputationMessage, time_out: float=None):
+    def send(self, receiver: int, msg: PackedMessage, time_out: float=None):
         """
         :param receiver: 接收方
         :param msg: 消息
@@ -124,7 +126,7 @@ class Peer(BaseChannel):
         """
         if not time_out:
             time_out = self.time_out
-        resp = ComputationMessage(MessageType.RECEIVED_ERR, None)
+        resp = PackedMessage(MessageType.RECEIVED_ERR, None)
         start_send_time = time.time()
         while resp.header == MessageType.RECEIVED_ERR:
             if time.time() - start_send_time > time_out:

@@ -1,12 +1,11 @@
 from flask import Flask, request
 import json
 import os
-import traceback
 from Utils.Log import Logger
-import Server.TaskControl.TaskScriptMaker as TM
-import Server.TaskControl.TaskConfig as Config
+import Task.TaskScriptMaker as TM
+import Task.TaskConfig as Config
 import threading
-
+import Task.Utils as Utils
 
 client_server = Flask(__name__)
 
@@ -40,6 +39,7 @@ def create_task():
         TM.create_task_pyscript(**post_json)
     except Exception as e:
         err = "Error while creating task script. Error:\n" + str(e)
+        logger.logE(err)
         return resp_msg("err", err)
     return resp_msg()
 
@@ -60,3 +60,9 @@ def start_task():
         threading.Thread(target=start_thread).start()
         return resp_msg()
     return resp_msg("err", "Task is not created")
+
+
+@client_server.route("/queryStatus", methods=["GET"])
+def query_task():
+    task_name = request.args.get("task_name")
+    return resp_msg("ok", Utils.task_status(task_name, 0))

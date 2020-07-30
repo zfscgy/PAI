@@ -1,79 +1,86 @@
 from enum import Enum
 
 
+class _AutoIndexer:
+    def __init__(self):
+        self._index = 0
+
+    def auto(self):
+        self._index += 1
+        return self._index
+
+
+indexer = _AutoIndexer()
+
+
 class MessageType(Enum):
-    NULL = 0
+    NULL = indexer.auto()
 
-    # 以下指令主要用于Secret-sharing矩阵乘法，主要场景为一个客户端提供数据，另一个提供参数，求其变换后的数据
-    # 比如：一个客户端的数据shape = (batch_size, dim)，另一个客户端拥有对应的参数 (dim, out_dim)
-    # 该方法可以计算出这两个矩阵的乘积，而客户端的自己的数据不需要发送出去。
+    Common_Stop = indexer.auto()
 
-    SET_TRIPLET = 11
-    """
-    Send a beaver triple request to triple provider
-    The data should be:
-    `Tuple(target_client:int, shape_sender:Tuple(int, int), shape_target:Tuple(int, int))`
-    """
+    Triplet_Set = indexer.auto()
+    Triplet_Array = indexer.auto()
 
-    TRIPLE_ARRAY = 12
-    """
-    Used for triple provider, for send the triple to the two parties
-    """
+    SharedNN_RandomSeed = indexer.auto()
+    SharedNN_ClientDim = indexer.auto()
+    SharedNN_TrainConfig = indexer.auto()
+    SharedNN_FeatureClientOut = indexer.auto()
+    SharedNN_MainClientOut = indexer.auto()
+    SharedNN_MainClientGradLoss = indexer.auto()
+    SharedNN_FeatureClientGrad = indexer.auto()
+    SharedNN_FeatureClientParaGrad = indexer.auto()
 
-    TRAIN_CONFIG = 14
-    """
-    Configurations for training, should be sent by the main client before start traing,
-    including: data_dimensions, batch_sizes
-    """
-
-    CLIENT_READY = 15
+    CLIENT_READY = indexer.auto()
     """
     """
 
-    NEXT_TRAIN_ROUND = 17
+    NEXT_TRAIN_ROUND = indexer.auto()
     """
     Client start next training round
     the data usually is None
     If the data is "Test", then this round should be performed in test mode
     """
 
-    PARA_GRAD = 18
+    PARA_GRAD = indexer.auto()
 
-    TRAINING_STOP = 19
+    TRAINING_STOP = indexer.auto()
     # Those is for shared matrix multiplication
 
-    MUL_DATA_SHARE = 20
+    MUL_DATA_SHARE = indexer.auto()
     """
     Used by `DataClient`, to send shares of its data to the other party
     """
 
-    MUL_OwnVal_SHARE = 21
+    MUL_OwnVal_SHARE = indexer.auto()
     """
     Used by `DataClient`, send its A - U to the other party 
     (A is its share of its own matrix, and U is its share of its triple)
     """
 
-    MUL_OtherVal_SHARE = 22
+    MUL_OtherVal_SHARE = indexer.auto()
     """
     Used by `DataClient`, send its B - V to the other party 
     (B is its share of the other party's matrix, and V is its share of the other party's triple)
     """
+    MUL_OUT_SHARE = indexer.auto()
 
-    MUL_OUT_SHARE = 24
+    MUL_Mat_Share = indexer.auto()
+    MUL_AsubU_Share = indexer.auto()
+    MUL_BsubV_Share =indexer.auto()
 
-    PRED_LABEL = 28
-    PRED_GRAD = 29
-    CLIENT_OUT_GRAD = 30
-    CLIENT_PARA_UPDATE = 31
-    CLIENT_ROUND_OVER = 32
+    PRED_LABEL = indexer.auto()
+    PRED_GRAD = indexer.auto()
+    CLIENT_OUT_GRAD = indexer.auto()
+    CLIENT_PARA_UPDATE = indexer.auto()
+    CLIENT_ROUND_OVER = indexer.auto()
 
-    ALIGN_AES_KEY = 50
-    ALIGN_ENC_IDS = 51
-    ALIGN_FINAL_IDS = 52
+    ALIGN_AES_KEY = indexer.auto()
+    ALIGN_ENC_IDS = indexer.auto()
+    ALIGN_FINAL_IDS = indexer.auto()
 
     # Those is for message responses
-    RECEIVED_ERR = 98
-    RECEIVED_OK = 99
+    RECEIVED_ERR = indexer.auto()
+    RECEIVED_OK = indexer.auto()
 
 
 class ReceiveERRType(Enum):
@@ -82,7 +89,7 @@ class ReceiveERRType(Enum):
     CONNECTION_FAILED = 3
 
 
-class ComputationMessage:
+class PackedMessage:
     """
     Message class
     """
