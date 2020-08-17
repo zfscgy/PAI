@@ -14,6 +14,8 @@ task_request = {
                 "in_dim": 64,
                 "out_dim": 1,
                 "layers": [1],
+                "test_per_batches": 101,
+                "max_iter":12345
             }
         },
         {

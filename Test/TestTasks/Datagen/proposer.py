@@ -23,7 +23,8 @@ task_request = {
                 "client_type": "alignment_data",  # 样本对齐的数据节点，这种Client需要有额外的参数，直接加在下面即可。
                 "computation_port": 8085,
                 "raw_data_path": "Splitted_Indexed_Data/credit_default_data1.csv",  # 原始数据路径
-                "out_data_path": "test-f1"  # 对齐后的数据路径（这里的路径并不是绝对路径，而是根据用户配置的某个根目录的相对路径）
+                "out_data_path": "test-f1",  # 对齐后的数据路径（这里的路径并不是绝对路径，而是根据用户配置的某个根目录的相对路径），
+                "columns": ["X1", "X2"]
             }
         },
         {
@@ -42,7 +43,7 @@ task_request = {
             "addr": "127.0.0.1",
             "http_port": 8884,
             "client_config": {
-                "computation_port": 8885,
+                "computation_port": 18885,
                 "client_type": "alignment_data",
                 "raw_data_path": "Splitted_Indexed_Data/credit_default_label.csv",
                 "out_data_path": "test-l"
@@ -51,5 +52,6 @@ task_request = {
     ]
 }
 
-resp = requests.post("http://127.0.0.1:8380/createTask", json=task_request)
+resp = requests.post("http://10.214.192.22:8380/createTask", json=task_request)
+# resp = requests.post("http://127.0.0.1:8380/createTask", json=task_request)
 print(resp.status_code, resp.text)

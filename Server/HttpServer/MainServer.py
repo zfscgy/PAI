@@ -6,8 +6,8 @@ import os
 from Communication.protobuf.message_pb2 import TaskQuery
 from Utils.Log import Logger
 from Task.TaskQuery import TaskQueryClient
-from Server.HttpServer.ServerConfig import ServerLogPath, ServerTaskRoot
-from Server.HttpServer.TaskParaGenerator import generate_task_paras
+from Server.HttpServer.ServerConfig import ServerLogPath, ServerTaskRoot, ClientProtocol
+from Server.HttpServer.TaskParaGenerator import generate_task_paras, generate_dataset_json
 from Server.HttpServer.BroadcastRequests import broadcast_request
 
 
@@ -51,6 +51,7 @@ def create_task():
     # Generate client task parameters
     try:
         client_paras, client_http_addrs = generate_task_paras(post_data)
+        data_json = generate_dataset_json(post_data)
     except Exception as e:
         err = "Generate task parameters failed: " + str(e)
         logger.logE(err)
@@ -59,7 +60,7 @@ def create_task():
     global http_query_dict
     http_query_dict[task_name] = client_http_addrs
 
-    client_errs, client_resps = broadcast_request([client_addr + "/createTask" for client_addr in client_http_addrs],
+    client_errs, client_resps = broadcast_request([ClientProtocol + client_addr + "/createTask" for client_addr in client_http_addrs],
                                                   "post", jsons=client_paras)
     if len(client_errs) != 0:
         err = "CreateTask failed due to POST error: " + str(client_errs)
@@ -77,11 +78,15 @@ def create_task():
 
     json.dump(post_data, open(ServerTaskRoot + task_name + ".json", "w+"), indent=4)
     logger.log("Task Created, Save json file in " + ServerTaskRoot + task_name + ".json")
+    if data_json is not None:
+        json.dump(data_json, open(ServerTaskRoot + "Data/" + task_name + ".json", "w+"), indent=4)
+        logger.log("Distributed dataset initialized, saved in" + ServerTaskRoot + "Data/" + task_name + ".json")
     return resp_msg()
 
 
 task_query_dict = dict()
 http_query_dict = dict()
+
 
 @main_server.route("/startTask", methods=["GET"])
 def start_task():
@@ -95,7 +100,7 @@ def start_task():
 
     client_paras, client_addrs = generate_task_paras(task_json)
 
-    client_errs, client_resps = broadcast_request([client_addr + "/startTask" for client_addr in client_addrs],
+    client_errs, client_resps = broadcast_request([ClientProtocol + client_addr + "/startTask" for client_addr in client_addrs],
                                                   "get", params=[{"task_name": task_name, "client_id": i}
                                                                 for i in range(len(client_addrs))])
 
@@ -153,10 +158,54 @@ def query_status():
         client_addrs = generate_task_paras(json.load(open(ServerTaskRoot + task_name + ".json")))[1]
         http_query_dict[task_name] = client_addrs
     try:
-        resp = requests.get(client_addrs[0] + "/queryStatus", params={"task_name": task_name})
+        resp = requests.get(ClientProtocol + client_addrs[0] + "/monitor",
+                            params={"query": "task_status", "task_name": task_name, "client_id": 0})
     except:
         return resp_msg("Failed to get task status. The main client's address {} is unavailable".format(client_addrs[0]))
     if resp.status_code != requests.codes.ok:
         return resp_msg(
             "Failed to get task status. The main client's address {} is unavailable".format(client_addrs[0]))
     return resp.json()
+
+
+@main_server.route("/queryDataset", methods=["GET"])
+def query_dataset():
+    task_name = request.args.get("task_name")
+    if not os.path.isfile(ServerTaskRoot + "Data/" + task_name + ".json"):
+        return resp_msg("err", "NotExist")
+
+    data_dict = json.load(open(ServerTaskRoot + "Data/" + task_name + ".json"))
+    try:
+        addr = list(data_dict.keys())[0]
+        resp = requests.get(ClientProtocol + addr + "/monitor", params={
+            "query": "data_status",
+            "data_name": data_dict[addr]
+        })
+        if resp.status_code != requests.codes.ok:
+            return resp_msg("err", "HttpErrorCode: " + str(resp.status_code))
+        return resp.json()
+    except Exception as e:
+        return resp_msg("err", "Error query client: " + str(e))
+
+
+@main_server.route("/queryRecord", methods=["GET"])
+def query_record():
+    task_name = request.args.get("task_name")
+    if task_name in http_query_dict:
+        client_addrs = http_query_dict[task_name]
+    else:
+        if not os.path.isfile(ServerTaskRoot + task_name + ".json"):
+            return resp_msg("ok", "NotExist")
+        client_addrs = generate_task_paras(json.load(open(ServerTaskRoot + task_name + ".json")))[1]
+        http_query_dict[task_name] = client_addrs
+    try:
+        resp = requests.get(ClientProtocol + client_addrs[-1] + "/monitor", params={
+            "query": "record",
+            "task_name": task_name,
+            "client_id": len(client_addrs) - 1,
+        })
+        if resp.status_code != requests.codes.ok:
+            return resp_msg("err", "HttpErrorCode: " + str(resp.status_code))
+        return resp.json()
+    except Exception as e:
+        return resp_msg("err", "Error query client: " + str(e))

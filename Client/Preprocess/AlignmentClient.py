@@ -15,10 +15,12 @@ class PreprocessClient(MPCClient):
     aes_key_len = 16
 
     def __init__(self, channel: BaseChannel, logger: Logger, mpc_paras: MPCClientParas,
-                 filepath: str, out_dir: str):
+                 filepath: str, out_dir: str, cols: list = None):
         super(PreprocessClient, self).__init__(channel, logger, mpc_paras)
         self.filepath = filepath
         self.out_dir = out_dir
+        self.cols = cols
+
         self.other_data_client_ids = self.feature_client_ids + [self.label_client_id]
         self.other_data_client_ids.remove(self.client_id)
 
@@ -95,12 +97,12 @@ class PreprocessClient(MPCClient):
 
     def __load_and_enc_data(self):
         try:
-            self.data = pd.read_csv(self.filepath, header=None)
+            self.data = pd.read_csv(self.filepath)
         except Exception as e:
             self.logger.logE("Error while read csv")
             raise e
-        self.data[0] = self.data[0].astype(str)
-        self.data = self.data.set_index(0)
+        self.data.iloc[:, 0] = self.data.iloc[:, 0].astype(str)
+        self.data = self.data.set_index(self.data.columns[0])
         self.sample_ids = self.data.index.values.tolist()
         encrypted_ids = list()
         for sample_id in self.sample_ids:
@@ -147,22 +149,29 @@ class PreprocessClient(MPCClient):
         selected_ids = list()
         for sample_id in encrypted_ids:
             selected_ids.append(AES.new(self.shared_aes_key, AES.MODE_CBC, self.shared_aes_iv).
-                                    decrypt(sample_id).decode('utf8').replace('\0', ''))
+                                decrypt(sample_id).decode('utf8').replace('\0', ''))
 
         aligned_data = self.data.loc[selected_ids]
 
         file_name = pathlib.Path(self.filepath).name
 
         self.out_indexed_file = self.out_dir + file_name[:-4] + "_aligned.csv"
-        aligned_data.to_csv(self.out_indexed_file, header=None,  index=True)
+        aligned_data.to_csv(self.out_indexed_file, index=True)
         test_size = int(len(selected_ids) / 5)
         train_data = aligned_data.iloc[:-test_size]
         test_data = aligned_data.iloc[-test_size:]
 
         self.train_data_path = self.out_dir + "train.csv"
         self.test_data_path = self.out_dir + "test.csv"
-        train_data.to_csv(self.train_data_path, header=None, index=False)
-        test_data.to_csv(self.test_data_path, header=None, index=False)
+        if self.cols is None:
+            self.cols = self.data.columns
+        if isinstance(self.cols[0], int):
+            self.cols = self.data.columns[self.cols]
+        if not set(self.cols) <= set(train_data.columns):
+            self.logger.logE("Selected columns not in the csv.")
+            return False
+        train_data[self.cols].to_csv(self.train_data_path, header=False, index=False)
+        test_data[self.cols].to_csv(self.test_data_path, header=False, index=False)
 
         self.logger.log("Align finished, aligned file saved in " + self.out_dir)
         return True

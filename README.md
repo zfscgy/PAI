@@ -11,3 +11,7 @@ PAI是一个基于MPC（安全多方计算）的隐私AI库，实现了从样本
 ### PAI Server - MPC任务调度和查询服务器
 
 主节点运行Flask服务器，只需要一个Json POST请求，就可以创建MPC任务并且让各个节点开始执行任务。随时通过Http查询任务进展情况和测试集验证结果等信息。
+
+### 文档
+
+请访问 [PAI-Docs](https://zfscgy.github.io/PAI-doc/)

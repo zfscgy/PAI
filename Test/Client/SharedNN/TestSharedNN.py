@@ -45,7 +45,7 @@ def test_credit_data_2pc():
     label_client = LabelClient(channel4, Logger(prefix="Lable client:"), mpc_paras,
                                CSVDataLoader("Test/TestDataset/Data/credit_default.csv", list(range(40000)), list(range(72, 73))),
                                CSVDataLoader("Test/TestDataset/Data/credit_default.csv", list(range(40000, 50000)),
-                                             list(range(72, 73))), MSELoss(), AUC_KS)
+                                             list(range(72, 73))), MSELoss(), AUC_KS, "")
     main_client_start_th = threading.Thread(
         target=main_client.start_train,
     )

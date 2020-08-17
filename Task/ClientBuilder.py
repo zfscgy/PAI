@@ -29,7 +29,7 @@ def build_SharedNN_MainClient(arg_dict: dict):
                                  arg_dict.get("test_batch_size") or 10000,
                                  arg_dict.get("test_per_batches") or 1001,
                                  arg_dict.get("learning_rate") or 0.1,
-                                 arg_dict.get("max_iter") or 1001)
+                                 arg_dict.get("max_iter") or 10010)
     return ClientHandle(client, {"n_batches": lambda: client.n_rounds}, client.start_train)
 
 
@@ -52,7 +52,8 @@ def build_SharedNN_LabelClient(arg_dict: dict):
 
 def build_Alignment_DataClient(arg_dict: dict):
     client = Alignment_DataClient(arg_dict["channel"], arg_dict["logger"], arg_dict["mpc_paras"],
-                                  arg_dict["raw_data_path"], arg_dict["out_data_path"])
+                                  arg_dict["raw_data_path"], arg_dict["out_data_path"],
+                                  arg_dict.get("columns"))
     return ClientHandle(client, dict(), client.start_align)
 
 

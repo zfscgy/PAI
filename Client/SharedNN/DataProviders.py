@@ -257,6 +257,7 @@ class LabelClient(DataClient):
         try:
             preds, mode = self.receive_check_msg(self.main_client_id, MessageType.SharedNN_MainClientOut).data
             if mode == "Train" or mode == "Train-Stop":
+                self.mpc_mode = MPCC.ClientMode.Train
                 self.batch_data = self.train_data_loader.get_batch(self.batch_size)
             elif mode == "Test" or mode == "Test-Stop":
                 self.mpc_mode = MPCC.ClientMode.Test
@@ -289,6 +290,6 @@ class LabelClient(DataClient):
             if self.finished:
                 pd.DataFrame(self.test_record,
                              columns=["time", "n_batches", "loss"] + ["metrics"] * (len(self.test_record[0]) - 3)).\
-                    to_csv(self.task_dir + "test_record.csv", index=False)
+                    to_csv(self.task_dir + "record.csv", index=False)
                 return True
             self.n_rounds += 1

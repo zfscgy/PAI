@@ -1,5 +1,5 @@
 import json
-from Server.HttpServer.TaskParaGenerator import generate_task_paras
+from Server.HttpServer.TaskParaGenerator import generate_task_paras, generate_dataset_json
 
 task_request = {
     "task_name": "test-datagen",
@@ -62,3 +62,5 @@ if __name__ == '__main__':
     print(client_addrs)
     for client_para in client_paras:
         print(json.dumps(client_para, indent=2))
+    client_data = generate_dataset_json(task_request)
+    print(json.dumps(client_data, indent=2))

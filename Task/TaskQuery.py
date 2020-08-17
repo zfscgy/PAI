@@ -21,8 +21,11 @@ class QueryMPCTaskServicer(message_pb2_grpc.QueryMPCTaskServicer):
             return message_pb2.TaskResponse(status=status.value, python_bytes=pickle.dumps(obj))
         if request.query_string not in self.query_dict:
             return encode(TaskQueryStatus.err, "Query url not exist")
-        status, resp = self.query_dict[request.query_string]()
-        return encode(status, resp)
+        try:
+            resp = self.query_dict[request.query_string]()
+            return encode(TaskQueryStatus.ok, resp)
+        except Exception as e:
+            return encode(TaskQueryStatus.err, str(e))
 
     def add_query(self, url, func):
         if callable(func):

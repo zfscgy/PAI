@@ -12,7 +12,7 @@ class ParaGenerationException(Exception):
 def generate_task_paras(paras: dict):
     clients = paras["clients"]
     client_configs = [client["client_config"].copy() for client in clients]
-    client_http_addrs = [ClientProtocol + client["addr"] + ":" + str(client["http_port"]) for client in clients]
+    client_http_addrs = [client["addr"] + ":" + str(client["http_port"]) for client in clients]
     client_computation_addrs = [client["addr"] + ":" + str(client["client_config"]["computation_port"])
                                 for client in clients]
 
@@ -58,3 +58,14 @@ def generate_task_paras(paras: dict):
         )
 
     return client_task_paras, client_http_addrs
+
+
+def generate_dataset_json(paras: dict):
+    data_dict = dict()
+    for client in paras["clients"]:
+        if "out_data_path" in client["client_config"]:
+            data_dict[client["addr"] + ":%d" % client["http_port"]] = client["client_config"]["out_data_path"]
+    if len(data_dict) == 0:
+        return None
+    else:
+        return data_dict

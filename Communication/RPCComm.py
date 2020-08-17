@@ -76,7 +76,8 @@ class Peer(BaseChannel):
         self.receive_buffer = [dict() for _ in ip_dict]
         self.time_out = time_out
         self.server.start()
-        self.logger.log("Peer id %d started." % self.client_id)
+        time.sleep(1)
+        self.logger.log("Peer id {} started. on port {}".format(self.client_id, self_port))
 
     def buffer_msg(self, msg: PackedMessage, sender_id):
         """

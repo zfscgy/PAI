@@ -43,7 +43,7 @@ class MPCClient(BaseClient):
         self.mpc_mode = ClientMode.Train
 
 
-class ProprecessClient(MPCClient):
+class PreprocessClient(MPCClient):
     def __init__(self, channel: BaseChannel, logger: Logger, mpc_paras: MPCClientParas,
                  source_data_file: str, out_data_dir: str):
         """
@@ -53,17 +53,17 @@ class ProprecessClient(MPCClient):
         :param source_data_file:
         :param out_data_dir:
         """
-        super(ProprecessClient, self).__init__(channel, logger, mpc_paras)
+        super(PreprocessClient, self).__init__(channel, logger, mpc_paras)
         self.other_data_client_ids = mpc_paras.feature_client_ids.copy()
         self.other_data_client_ids.remove(self.client_id)
         if os.path.isfile(source_data_file):
             self.source_data_file = source_data_file
         else:
-            raise MPCClientException(ProprecessClient, "source_data_file not exists")
+            raise MPCClientException(PreprocessClient, "source_data_file not exists")
         if os.path.isdir(out_data_dir):
             self.out_data_dir = out_data_dir
         else:
-            raise MPCClientException(ProprecessClient, "out_data_dir is not a directory")
+            raise MPCClientException(PreprocessClient, "out_data_dir is not a directory")
 
     def start_preprocess(self):
         raise NotImplementedError()
