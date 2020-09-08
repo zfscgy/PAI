@@ -18,11 +18,11 @@ def test_encode_decode():
 def test_rpc():
     print("========== Test rpc clients ========")
     ip_dict = {
-        0: "127.0.0.1:19001",
-        1: "127.0.0.1:19002"
+        0: "192.168.1.6:19001",
+        1: "192.168.1.6:19002"
     }
-    channel0 = Peer(0, "[::]:19001", 10, ip_dict)
-    channel1 = Peer(1, "[::]:19002", 10, ip_dict)
+    channel0 = Peer(0, "0.0.0.0:19001", 10, ip_dict)
+    channel1 = Peer(1, "0.0.0.0:19002", 10, ip_dict)
     print("========= Test plain send =======")
     resp = channel0.send(1, PackedMessage(MessageType.NULL, "Hello from client 0"))
     print("Client0 get response:")

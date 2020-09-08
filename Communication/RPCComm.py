@@ -71,12 +71,12 @@ class Peer(BaseChannel):
         """
         super(Peer, self).__init__(self_id, "", len(ip_dict), logger)
         self.server = ComputationRPCServer(self_port, self_max_workers, self.buffer_msg)
+        time.sleep(5)
         self.rpc_clients = [ComputationRPCClient(ip_dict[client_num]) for client_num in ip_dict]
         self.ip_dict = ip_dict
         self.receive_buffer = [dict() for _ in ip_dict]
         self.time_out = time_out
         self.server.start()
-        time.sleep(1)
         self.logger.log("Peer id {} started. on port {}".format(self.client_id, self_port))
 
     def buffer_msg(self, msg: PackedMessage, sender_id):

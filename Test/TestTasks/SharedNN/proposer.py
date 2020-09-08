@@ -11,9 +11,9 @@ task_request = {
             "client_config": {
                 "client_type": "shared_nn_main",
                 "computation_port": 8378,
-                "in_dim": 64,
+                "in_dim": 1,
                 "out_dim": 1,
-                "layers": [1],
+                "layers": [],
                 "test_per_batches": 101,
                 "max_iter":12345
             }
@@ -57,7 +57,7 @@ task_request = {
                 "client_type": "shared_nn_label",
                 "data_path": "test-l",
                 "loss": "mse",
-                "metric": "auc_ks"
+                "metric": "metrics_pack1"
             }
         }
     ]

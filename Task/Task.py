@@ -27,7 +27,7 @@ class Task:
         try:
             ip_dict = str_dict_to_int(ip_dict)
             self.arg_dict["channel"] = self.channel = \
-                Channel(client_id, '127.0.0.1:%d' % client_port, 3, ip_dict, 120, self.logger)
+                Channel(client_id, '0.0.0.0:%d' % client_port, 3, ip_dict, 120, self.logger)
         except:
             self.logger.logE("Failed to create channel. Abort.")
             self.status = TaskStatus.Error
