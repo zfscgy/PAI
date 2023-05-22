@@ -1,7 +1,7 @@
 numpy==1.19.0
 pandas==1.0.5
 tensorflow==2.2.0
-requests==2.24.0
+requests==2.31.0
 scikit-learn==0.23.1
 flask==1.1.2
 pycrypto==2.6.1
